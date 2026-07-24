@@ -5,9 +5,7 @@
    ============================================================ */
 
 const CONFIG = {
-  API_URL:https://script.google.com/macros/s/AKfycbz90L7SdhTzLTPe1cDlb0VzDzpMG7H5-VVXpxNAUJSt6vvaGMriSMf2OR1Dc73gkEqScA/exec// ej: https://script.google.com/macros/s/AKfycb.../exec
-};
-
+  API_URL:API_URL: 'https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbz90L7SdhTzLTPe1cDlb0VzDzpMG7H5-VVXpxNAUJSt6vvaGMriSMf2OR1Dc73gkEqScA/exec/exec'// 
 const MENU = [
   { id: 'dashboard',  label: '📊 Dashboard',          roles: ['Administrador', 'Supervisor', 'Gerente', 'Consulta', 'Técnico'] },
   { id: 'ordenes',    label: '🧾 Órdenes de trabajo',  roles: ['Administrador', 'Supervisor', 'Técnico', 'Consulta'] },
