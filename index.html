@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mantenimiento Analiza</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ============ PANTALLA DE LOGIN ============ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg width="150" height="180" viewBox="0 0 100 120" aria-hidden="true">
+        <path d="M50 4 C30 30 14 52 14 74 a36 36 0 1 0 72 0 C86 52 70 30 50 4 Z" fill="#e11d2e"/>
+        <g transform="translate(28,52) scale(0.086)" fill="#ffffff">
+          <path d="M507.73 109.1c-2.24-9.03-13.54-12.09-20.12-5.51l-74.36 74.36-49.21-8.2-8.2-49.21 74.36-74.36c6.62-6.62 3.43-17.9-5.61-20.13-53.94-13.36-112.01 1.75-152.03 41.77-42.87 42.87-56.09 104.63-39.5 159.11L18.05 410.94c-24.02 24.02-24.02 62.94 0 86.96 24.02 24.02 62.94 24.02 86.96 0l213.68-213.68c54.48 16.6 116.24 3.38 159.11-39.5 40.03-40.02 55.13-98.09 41.77-152.03zM64 472c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24z"/>
+        </g>
+      </svg>
+    </div>
+    <h1>Mantenimiento Analiza</h1>
+    <form id="loginForm">
+      <label>Usuario</label>
+      <input type="text" id="loginUser" placeholder="usuario" required>
+      <label>Contraseña</label>
+      <input type="password" id="loginPass" placeholder="••••••••" required>
+      <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
+      <p id="loginError" class="error-msg"></p>
+    </form>
+    <p class="login-hint">Usuario inicial: <b>admin</b> / <b>admin123</b></p>
+  </div>
+</div>
+
+<!-- ============ APP PRINCIPAL ============ -->
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">
+        <svg width="28" height="34" viewBox="0 0 100 120" aria-hidden="true">
+          <path d="M50 4 C30 30 14 52 14 74 a36 36 0 1 0 72 0 C86 52 70 30 50 4 Z" fill="#e11d2e"/>
+          <g transform="translate(28,52) scale(0.086)" fill="#ffffff">
+            <path d="M507.73 109.1c-2.24-9.03-13.54-12.09-20.12-5.51l-74.36 74.36-49.21-8.2-8.2-49.21 74.36-74.36c6.62-6.62 3.43-17.9-5.61-20.13-53.94-13.36-112.01 1.75-152.03 41.77-42.87 42.87-56.09 104.63-39.5 159.11L18.05 410.94c-24.02 24.02-24.02 62.94 0 86.96 24.02 24.02 62.94 24.02 86.96 0l213.68-213.68c54.48 16.6 116.24 3.38 159.11-39.5 40.03-40.02 55.13-98.09 41.77-152.03zM64 472c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24z"/>
+          </g>
+        </svg>
+      </span>
+      <div>
+        <div class="sidebar-title">Mantenimiento Analiza</div>
+        <div class="sidebar-user" id="sidebarUser"></div>
+      </div>
+    </div>
+    <nav id="sidebarNav" class="sidebar-nav"></nav>
+    <button id="logoutBtn" class="btn btn-ghost btn-block">Cerrar sesión</button>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menuToggle" class="menu-toggle">☰</button>
+      <h2 id="viewTitle">Dashboard</h2>
+      <div class="topbar-right">
+        <span id="apiStatus" class="api-status">● API no configurada</span>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view">
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-value" id="kpiAbiertas">0</div><div class="kpi-label">Órdenes abiertas</div></div>
+          <div class="kpi-card"><div class="kpi-value" id="kpiCerradas">0</div><div class="kpi-label">Órdenes cerradas</div></div>
+          <div class="kpi-card"><div class="kpi-value" id="kpiTiempo">0</div><div class="kpi-label">Días prom. reparación</div></div>
+          <div class="kpi-card"><div class="kpi-value" id="kpiCosto">$0</div><div class="kpi-label">Costo total</div></div>
+          <div class="kpi-card"><div class="kpi-value" id="kpiFueraServicio">0</div><div class="kpi-label">Vehículos fuera de servicio</div></div>
+          <div class="kpi-card"><div class="kpi-value" id="kpiTecnicoTop">-</div><div class="kpi-label">Técnico con más carga</div></div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card"><h3>Órdenes por estado</h3><canvas id="chartEstado"></canvas></div>
+          <div class="chart-card"><h3>Órdenes por sucursal (top 10)</h3><canvas id="chartSucursal"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Estado de sucursales</h3>
+          <div id="sucursalesGrid" class="sucursales-grid"></div>
+        </div>
+      </section>
+
+      <!-- SUCURSALES -->
+      <section id="view-sucursales" class="view hidden">
+        <div class="view-toolbar">
+          <button class="btn btn-primary" data-add="Sucursales">+ Nueva sucursal</button>
+          <button class="btn btn-secondary" data-export="Sucursales">Exportar CSV</button>
+        </div>
+        <div class="table-wrap"><table id="table-Sucursales"><thead></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- TECNICOS -->
+      <section id="view-tecnicos" class="view hidden">
+        <div class="view-toolbar">
+          <button class="btn btn-primary" data-add="Tecnicos">+ Nuevo técnico</button>
+          <button class="btn btn-secondary" data-export="Tecnicos">Exportar CSV</button>
+        </div>
+        <div class="table-wrap"><table id="table-Tecnicos"><thead></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- VEHICULOS -->
+      <section id="view-vehiculos" class="view hidden">
+        <div class="view-toolbar">
+          <button class="btn btn-primary" data-add="Vehiculos">+ Nuevo vehículo</button>
+          <button class="btn btn-secondary" data-export="Vehiculos">Exportar CSV</button>
+        </div>
+        <div class="table-wrap"><table id="table-Vehiculos"><thead></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- ORDENES -->
+      <section id="view-ordenes" class="view hidden">
+        <div class="view-toolbar">
+          <button class="btn btn-primary" id="btnNuevaOrden">+ Nueva orden de trabajo</button>
+          <button class="btn btn-secondary" data-export="Ordenes">Exportar CSV</button>
+          <select id="filtroEstado" class="filter-select">
+            <option value="">Todos los estados</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="En proceso">En proceso</option>
+            <option value="Finalizado">Finalizado</option>
+          </select>
+        </div>
+        <div class="table-wrap"><table id="table-Ordenes"><thead></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- INVENTARIO -->
+      <section id="view-inventario" class="view hidden">
+        <div class="view-toolbar">
+          <button class="btn btn-primary" data-add="Inventario">+ Nuevo repuesto</button>
+          <button class="btn btn-secondary" data-export="Inventario">Exportar CSV</button>
+        </div>
+        <div class="table-wrap"><table id="table-Inventario"><thead></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- PREVENTIVO -->
+      <section id="view-preventivo" class="view hidden">
+        <div class="view-toolbar">
+          <button class="btn btn-primary" data-add="Preventivo">+ Nuevo plan preventivo</button>
+          <button class="btn btn-secondary" data-export="Preventivo">Exportar CSV</button>
+        </div>
+        <div class="table-wrap"><table id="table-Preventivo"><thead></thead><tbody></tbody></table></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============ MODAL GENÉRICO CRUD ============ -->
+<div id="modalOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Registro</h3>
+      <button id="modalClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modalCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL ORDEN DE TRABAJO (rico: fotos + firma) ============ -->
+<div id="ordenModalOverlay" class="modal-overlay hidden">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="ordenModalTitle">Orden de trabajo</h3>
+      <button id="ordenModalClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div>
+          <label>Sucursal</label>
+          <select id="ordenSucursal"></select>
+        </div>
+        <div>
+          <label>Vehículo (opcional)</label>
+          <select id="ordenVehiculo"><option value="">-- Ninguno --</option></select>
+        </div>
+        <div>
+          <label>Técnico asignado</label>
+          <select id="ordenTecnico"></select>
+        </div>
+        <div>
+          <label>Tipo</label>
+          <select id="ordenTipo">
+            <option value="Preventivo">Preventivo</option>
+            <option value="Correctivo">Correctivo</option>
+          </select>
+        </div>
+        <div>
+          <label>Prioridad</label>
+          <select id="ordenPrioridad">
+            <option value="Baja">Baja</option>
+            <option value="Media" selected>Media</option>
+            <option value="Alta">Alta</option>
+          </select>
+        </div>
+        <div>
+          <label>Estado</label>
+          <select id="ordenEstado">
+            <option value="Pendiente">Pendiente</option>
+            <option value="En proceso">En proceso</option>
+            <option value="Finalizado">Finalizado</option>
+          </select>
+        </div>
+        <div>
+          <label>Fecha programada</label>
+          <input type="date" id="ordenFechaProgramada">
+        </div>
+        <div>
+          <label>Costo (USD)</label>
+          <input type="number" id="ordenCosto" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+      <label>Descripción de la falla / trabajo</label>
+      <textarea id="ordenDescripcion" rows="3" placeholder="Describe el problema o la tarea..."></textarea>
+      <label>Observaciones de cierre</label>
+      <textarea id="ordenObservaciones" rows="2" placeholder="Notas al finalizar..."></textarea>
+
+      <div class="foto-grid">
+        <div class="foto-box">
+          <label>Evidencia ANTES</label>
+          <input type="file" accept="image/*" id="fotoAntesInput">
+          <img id="fotoAntesPreview" class="foto-preview hidden">
+        </div>
+        <div class="foto-box">
+          <label>Evidencia DESPUÉS</label>
+          <input type="file" accept="image/*" id="fotoDespuesInput">
+          <img id="fotoDespuesPreview" class="foto-preview hidden">
+        </div>
+      </div>
+
+      <label>Firma digital del responsable</label>
+      <div class="signature-box">
+        <canvas id="signaturePad" width="500" height="150"></canvas>
+        <button type="button" class="btn btn-ghost btn-sm" id="clearSignature">Limpiar firma</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="ordenPrint">Imprimir / PDF</button>
+      <button class="btn btn-ghost" id="ordenCancel">Cancelar</button>
+      <button class="btn btn-primary" id="ordenSave">Guardar orden</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
