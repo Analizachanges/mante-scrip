@@ -1,6 +1,13 @@
+/* ============================================================
+   Mantenimiento Analiza - Frontend
+   Antes de usar: reemplaza CONFIG.API_URL con la URL de tu
+   implementación de Apps Script (ver GUIA_INSTALACION.md).
+   ============================================================ */
+
 const CONFIG = {
- API_URL: 'https://script.google.com/macros/s/AKfycbwr2xY_TccRA-f5rFL9cOVOIsg9ZYjhm4bERqpssjnWvSO2PhUF7zH5Cp6nrsFR3RKfhQ/exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbxrWfhp-5ZV_NX4HS64cZfsPHbj8bdWkNbkztOj7o5DShqbVPhHvcNPmGeA1jm6suN0Qw/exec'
 };
+
 const MENU = [
   { id: 'dashboard',  label: '📊 Dashboard',          roles: ['Administrador', 'Supervisor', 'Gerente', 'Consulta', 'Técnico'] },
   { id: 'ordenes',    label: '🧾 Órdenes de trabajo',  roles: ['Administrador', 'Supervisor', 'Técnico', 'Consulta'] },
@@ -79,15 +86,74 @@ const state = {
   charts: {}
 };
 
-/* ---------------- API ---------------- */
+/* ----------------------------------------------------------
+   API (puente formulario + iframe oculto + postMessage)
+   ----------------------------------------------------------
+   Google Apps Script bloquea de forma intermitente las
+   llamadas fetch() por CORS, incluso con la configuración
+   correcta. Los envíos de <form> a un iframe oculto no están
+   sujetos a esa restricción, y postMessage() sí puede cruzar
+   orígenes sin problema. Code.gs responde con una página HTML
+   que hace parent.postMessage(...) de vuelta.
+   ---------------------------------------------------------- */
+let bridgeIframe = null;
+const pendingRequests = {};
+let reqCounter = 0;
+
+function ensureBridgeIframe() {
+  if (bridgeIframe) return bridgeIframe;
+  bridgeIframe = document.createElement('iframe');
+  bridgeIframe.name = 'cmmsBridgeFrame';
+  bridgeIframe.style.display = 'none';
+  document.body.appendChild(bridgeIframe);
+  window.addEventListener('message', function (ev) {
+    const d = ev.data;
+    if (!d || !d.__cmmsBridge) return;
+    const pending = pendingRequests[d.reqId];
+    if (pending) {
+      pending.resolve(d.data);
+      delete pendingRequests[d.reqId];
+    }
+  });
+  return bridgeIframe;
+}
+
 function apiCall(action, sheet, body) {
-  let url = CONFIG.API_URL + '?action=' + encodeURIComponent(action);
-  if (sheet) url += '&sheet=' + encodeURIComponent(sheet);
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body || {})
-  }).then(function (r) { return r.json(); });
+  ensureBridgeIframe();
+  return new Promise(function (resolve, reject) {
+    const reqId = 'r' + (++reqCounter) + '_' + Date.now();
+    pendingRequests[reqId] = { resolve: resolve, reject: reject };
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = CONFIG.API_URL;
+    form.target = 'cmmsBridgeFrame';
+    form.style.display = 'none';
+
+    function addField(name, value) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+    addField('action', action);
+    if (sheet) addField('sheet', sheet);
+    addField('viaForm', '1');
+    addField('reqId', reqId);
+    addField('payload', JSON.stringify(body || {}));
+
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(function () { form.remove(); }, 1000);
+
+    setTimeout(function () {
+      if (pendingRequests[reqId]) {
+        delete pendingRequests[reqId];
+        reject(new Error('Tiempo de espera agotado'));
+      }
+    }, 20000);
+  });
 }
 
 function setApiStatus(ok) {
