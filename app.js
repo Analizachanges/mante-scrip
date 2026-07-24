@@ -1,5 +1,5 @@
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbz90L7SdhTzLTPe1cD1b0VzDzpMG7H5-VVXpxNAUJSt6vvaGMriSMf2OR1Dc73gkEqScA/exec'
+ API_URL: 'https://script.google.com/macros/s/AKfycbz90L7SdhTzLTPe1cD1b0VzDzpMG7H5-VVXpxNAUJSt6vvaGMriSMf2OR1Dc73gkEqScA/exec'
 };
 const MENU = [
   { id: 'dashboard',  label: '📊 Dashboard',          roles: ['Administrador', 'Supervisor', 'Gerente', 'Consulta', 'Técnico'] },
