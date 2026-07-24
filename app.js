@@ -1,11 +1,5 @@
-/* ============================================================
-   Mantenimiento Analiza - Frontend
-   Antes de usar: reemplaza CONFIG.API_URL con la URL de tu
-   implementación de Apps Script (ver GUIA_INSTALACION.md).
-   ============================================================ */
-
 const CONFIG = {
-  API_URL:API_URL: 'https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbz90L7SdhTzLTPe1cDlb0VzDzpMG7H5-VVXpxNAUJSt6vvaGMriSMf2OR1Dc73gkEqScA/exec/exec'// 
+  API_URLhttps:/script.google.com/macros/s/AKfycbz90L7SdhTzLTPe1cDlb0VzDzpMG7H5-VVXpxNAUJSt6vvaGMriSMf2OR1Dc73gkEqScA/exec//
 const MENU = [
   { id: 'dashboard',  label: '📊 Dashboard',          roles: ['Administrador', 'Supervisor', 'Gerente', 'Consulta', 'Técnico'] },
   { id: 'ordenes',    label: '🧾 Órdenes de trabajo',  roles: ['Administrador', 'Supervisor', 'Técnico', 'Consulta'] },
