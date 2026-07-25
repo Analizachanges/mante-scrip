@@ -1,9 +1,3 @@
-/* ============================================================
-   Mantenimiento Analiza - Frontend
-   Antes de usar: reemplaza CONFIG.API_URL con la URL de tu
-   implementación de Apps Script (ver GUIA_INSTALACION.md).
-   ============================================================ */
-
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbxrWfhp-5ZV_NX4HS64cZfsPHbj8bdWkNbkztOj7o5DShqbVPhHvcNPmGeA1jm6suN0Qw/exec'
 };
