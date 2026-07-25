@@ -1,5 +1,5 @@
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxrWfhp-5ZV_NX4HS64cZfsPHbj8bdWkNbkztOj7o5DShqbVPhHvcNPmGeA1jm6suN0Qw/exec'
+  API_URL:'https://script.google.com/macros/s/AKfycbxtRRrjb5cfytgAnIbaAGqOea2UMwi2ZVZio1l5BlWH57EuhrbXgGXeag_hemiId9m-/exec'
 };
 
 const MENU = [
