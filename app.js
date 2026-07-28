@@ -1,5 +1,11 @@
+/* ============================================================
+   Mantenimiento Analiza - Frontend
+   Antes de usar: reemplaza CONFIG.API_URL con la URL de tu
+   implementación de Apps Script (ver GUIA_INSTALACION.md).
+   ============================================================ */
+
 const CONFIG = {
-  API_URL:'https://script.google.com/macros/s/AKfycbxtRRrjb5cfytgAnIbaAGqOea2UMwi2ZVZio1l5BlWH57EuhrbXgGXeag_hemiId9m-/exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbyi8qLiFlDSNQE9IzVRh7V9_MOD6ui55l4bMOeYaOfZH0VS3TDdgN2YlQsSHD_DNJ5-ug/exec'
 };
 
 const MENU = [
@@ -81,72 +87,50 @@ const state = {
 };
 
 /* ----------------------------------------------------------
-   API (puente formulario + iframe oculto + postMessage)
+   API (JSONP: <script> con callback)
    ----------------------------------------------------------
-   Google Apps Script bloquea de forma intermitente las
-   llamadas fetch() por CORS, incluso con la configuración
-   correcta. Los envíos de <form> a un iframe oculto no están
-   sujetos a esa restricción, y postMessage() sí puede cruzar
-   orígenes sin problema. Code.gs responde con una página HTML
-   que hace parent.postMessage(...) de vuelta.
+   Google Apps Script bloquea fetch() por CORS de forma
+   irresoluble, y también impide que sus páginas se muestren
+   dentro de un iframe (X-Frame-Options). Un <script src="...">
+   con callback (JSONP) no está sujeto a ninguna de las dos
+   restricciones: el navegador simplemente ejecuta el script que
+   Apps Script devuelve, que llama a nuestra función callback.
    ---------------------------------------------------------- */
-let bridgeIframe = null;
-const pendingRequests = {};
 let reqCounter = 0;
 
-function ensureBridgeIframe() {
-  if (bridgeIframe) return bridgeIframe;
-  bridgeIframe = document.createElement('iframe');
-  bridgeIframe.name = 'cmmsBridgeFrame';
-  bridgeIframe.style.display = 'none';
-  document.body.appendChild(bridgeIframe);
-  window.addEventListener('message', function (ev) {
-    const d = ev.data;
-    if (!d || !d.__cmmsBridge) return;
-    const pending = pendingRequests[d.reqId];
-    if (pending) {
-      pending.resolve(d.data);
-      delete pendingRequests[d.reqId];
-    }
-  });
-  return bridgeIframe;
-}
-
 function apiCall(action, sheet, body) {
-  ensureBridgeIframe();
   return new Promise(function (resolve, reject) {
-    const reqId = 'r' + (++reqCounter) + '_' + Date.now();
-    pendingRequests[reqId] = { resolve: resolve, reject: reject };
+    const cbName = 'cmmsCb' + (++reqCounter) + '_' + Date.now();
+    const payload = encodeURIComponent(JSON.stringify(body || {}));
+    let url = CONFIG.API_URL + '?action=' + encodeURIComponent(action);
+    if (sheet) url += '&sheet=' + encodeURIComponent(sheet);
+    url += '&callback=' + cbName + '&payload=' + payload;
 
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = CONFIG.API_URL;
-    form.target = 'cmmsBridgeFrame';
-    form.style.display = 'none';
+    const script = document.createElement('script');
 
-    function addField(name, value) {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = name;
-      input.value = value;
-      form.appendChild(input);
-    }
-    addField('action', action);
-    if (sheet) addField('sheet', sheet);
-    addField('viaForm', '1');
-    addField('reqId', reqId);
-    addField('payload', JSON.stringify(body || {}));
-
-    document.body.appendChild(form);
-    form.submit();
-    setTimeout(function () { form.remove(); }, 1000);
-
-    setTimeout(function () {
-      if (pendingRequests[reqId]) {
-        delete pendingRequests[reqId];
-        reject(new Error('Tiempo de espera agotado'));
-      }
+    const timeoutId = setTimeout(function () {
+      cleanup();
+      reject(new Error('Tiempo de espera agotado'));
     }, 20000);
+
+    function cleanup() {
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function (data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = function () {
+      cleanup();
+      reject(new Error('Error al cargar la API'));
+    };
+
+    script.src = url;
+    document.body.appendChild(script);
   });
 }
 
@@ -404,7 +388,7 @@ function exportCSV(entityName) {
   URL.revokeObjectURL(url);
 }
 
-/* ---------------- ORDENES (rich modal) ---------------- */
+/* ---------------- ORDENES (modal con firma digital) ---------------- */
 document.getElementById('btnNuevaOrden').addEventListener('click', function () { openOrdenModal(null); });
 document.getElementById('ordenModalClose').addEventListener('click', closeOrdenModal);
 document.getElementById('ordenCancel').addEventListener('click', closeOrdenModal);
@@ -414,9 +398,6 @@ function closeOrdenModal() {
   document.getElementById('ordenModalOverlay').classList.add('hidden');
   state.ordenEditingId = null;
 }
-
-let currentFotoAntes = '';
-let currentFotoDespues = '';
 
 function openOrdenModal(existingRow) {
   state.ordenEditingId = existingRow ? existingRow.id : null;
@@ -431,13 +412,6 @@ function openOrdenModal(existingRow) {
 
   const tecSel = document.getElementById('ordenTecnico');
   tecSel.innerHTML = state.cache.Tecnicos.map(function (t) { return '<option value="' + t.id + '">' + t.nombre + '</option>'; }).join('');
-
-  currentFotoAntes = existingRow ? (existingRow.foto_antes || '') : '';
-  currentFotoDespues = existingRow ? (existingRow.foto_despues || '') : '';
-  togglePreview('fotoAntesPreview', currentFotoAntes);
-  togglePreview('fotoDespuesPreview', currentFotoDespues);
-  document.getElementById('fotoAntesInput').value = '';
-  document.getElementById('fotoDespuesInput').value = '';
 
   if (existingRow) {
     sucSel.value = existingRow.sucursal_id || '';
@@ -464,45 +438,6 @@ function openOrdenModal(existingRow) {
   if (existingRow && existingRow.firma) loadSignatureFromDataUrl(existingRow.firma);
 
   document.getElementById('ordenModalOverlay').classList.remove('hidden');
-}
-
-function togglePreview(imgId, dataUrl) {
-  const img = document.getElementById(imgId);
-  if (dataUrl) { img.src = dataUrl; img.classList.remove('hidden'); }
-  else { img.classList.add('hidden'); img.src = ''; }
-}
-
-document.getElementById('fotoAntesInput').addEventListener('change', function (e) {
-  if (!e.target.files[0]) return;
-  resizeImageFile(e.target.files[0], 800, function (dataUrl) {
-    currentFotoAntes = dataUrl;
-    togglePreview('fotoAntesPreview', dataUrl);
-  });
-});
-document.getElementById('fotoDespuesInput').addEventListener('change', function (e) {
-  if (!e.target.files[0]) return;
-  resizeImageFile(e.target.files[0], 800, function (dataUrl) {
-    currentFotoDespues = dataUrl;
-    togglePreview('fotoDespuesPreview', dataUrl);
-  });
-});
-
-function resizeImageFile(file, maxWidth, callback) {
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const img = new Image();
-    img.onload = function () {
-      const scale = Math.min(1, maxWidth / img.width);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      callback(canvas.toDataURL('image/jpeg', 0.6));
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
 }
 
 /* Signature pad */
@@ -567,8 +502,6 @@ document.getElementById('ordenSave').addEventListener('click', function () {
     costo: document.getElementById('ordenCosto').value,
     descripcion: document.getElementById('ordenDescripcion').value,
     observaciones: document.getElementById('ordenObservaciones').value,
-    foto_antes: currentFotoAntes,
-    foto_despues: currentFotoDespues,
     firma: state.signature.hasDrawing ? sigCanvas.toDataURL('image/png') : ''
   };
 
