@@ -5,7 +5,7 @@
    ============================================================ */
 
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbyi8qLiFlDSNQE9IzVRh7V9_MOD6ui55l4bMOeYaOfZH0VS3TDdgN2YlQsSHD_DNJ5-ug/exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbyeMZRPaHOh2EzNzLRsKLvXqIbuZeRU4OE4X3S6z9rfXPRYAxp8ji3w2iif3YOc9x1zHQ/exec'
 };
 
 const MENU = [
