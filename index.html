@@ -145,6 +145,33 @@
         <div class="table-wrap"><table id="table-Preventivo"><thead></thead><tbody></tbody></table></div>
       </section>
 
+      <!-- SOLICITUD (Gerente de Sucursal) -->
+      <section id="view-solicitud" class="view hidden">
+        <div class="chart-card form-card" style="max-width:600px;">
+          <h3>Reportar necesidad de mantenimiento</h3>
+          <p id="solicitudSucursalNombre" style="color:var(--text-muted);font-size:13px;"></p>
+          <label>Tipo</label>
+          <select id="solTipo">
+            <option value="Correctivo">Correctivo (algo está fallando)</option>
+            <option value="Preventivo">Preventivo (mantenimiento programado)</option>
+          </select>
+          <label>Prioridad</label>
+          <select id="solPrioridad">
+            <option value="Baja">Baja</option>
+            <option value="Media" selected>Media</option>
+            <option value="Alta">Alta</option>
+          </select>
+          <label>Describe la necesidad</label>
+          <textarea id="solDescripcion" rows="4" placeholder="Ej: El aire acondicionado no enfría, hace ruido raro..."></textarea>
+          <button class="btn btn-primary" id="btnEnviarSolicitud" style="margin-top:12px;">Enviar solicitud</button>
+          <p id="solicitudMsg" style="font-size:13px;margin-top:8px;"></p>
+        </div>
+        <div class="table-wrap" style="margin-top:20px;">
+          <h3 style="margin:0 0 10px;">Mis solicitudes</h3>
+          <table id="table-Solicitudes"><thead></thead><tbody></tbody></table>
+        </div>
+      </section>
+
     </div>
   </main>
 </div>
@@ -164,7 +191,7 @@
   </div>
 </div>
 
-<!-- ============ MODAL ORDEN DE TRABAJO (rico: fotos + firma) ============ -->
+<!-- ============ MODAL ORDEN DE TRABAJO (con firma digital) ============ -->
 <div id="ordenModalOverlay" class="modal-overlay hidden">
   <div class="modal modal-lg">
     <div class="modal-header">
@@ -190,6 +217,7 @@
           <select id="ordenTipo">
             <option value="Preventivo">Preventivo</option>
             <option value="Correctivo">Correctivo</option>
+            <option value="Extraordinario">Extraordinario</option>
           </select>
         </div>
         <div>
@@ -221,19 +249,6 @@
       <textarea id="ordenDescripcion" rows="3" placeholder="Describe el problema o la tarea..."></textarea>
       <label>Observaciones de cierre</label>
       <textarea id="ordenObservaciones" rows="2" placeholder="Notas al finalizar..."></textarea>
-
-      <div class="foto-grid">
-        <div class="foto-box">
-          <label>Evidencia ANTES</label>
-          <input type="file" accept="image/*" id="fotoAntesInput">
-          <img id="fotoAntesPreview" class="foto-preview hidden">
-        </div>
-        <div class="foto-box">
-          <label>Evidencia DESPUÉS</label>
-          <input type="file" accept="image/*" id="fotoDespuesInput">
-          <img id="fotoDespuesPreview" class="foto-preview hidden">
-        </div>
-      </div>
 
       <label>Firma digital del responsable</label>
       <div class="signature-box">
