@@ -737,14 +737,19 @@ function clearSignaturePad() {
    FIX: la hoja Usuarios a veces trae en sucursal_id el NOMBRE de la sucursal
    (ej. "SS - Escalon - L001") en vez del id interno (UUID) de Sucursales.
    Aceptamos ambos casos y normalizamos al id real apenas lo encontramos. */
+function normalizeSucursalName(s) {
+  return stripAccents(String(s || '')).trim().replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-');
+}
+
 function renderSolicitudView() {
   Promise.all([refreshSheet('Sucursales'), refreshSheet('Ordenes')]).then(function () {
     const sucursales = state.cache.Sucursales;
     const ordenes = state.cache.Ordenes;
 
     const raw = String(state.user.sucursal_id || '').trim();
+    const rawNorm = normalizeSucursalName(raw);
     const misucursal = sucursales.find(function (s) {
-      return String(s.id) === raw || String(s.nombre).trim().toLowerCase() === raw.toLowerCase();
+      return String(s.id) === raw || normalizeSucursalName(s.nombre) === rawNorm;
     });
 
     const nombreEl = document.getElementById('solicitudSucursalNombre');
