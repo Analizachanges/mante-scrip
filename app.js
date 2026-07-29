@@ -296,9 +296,9 @@ function refreshSheet(name) {
 /* ===================== ALCANCE POR ROL (Gerente de Área) ===================== */
 function applyRoleScope() {
   if (state.user.rol === 'Gerente de Área' && state.user.area) {
-    const userArea = state.user.area.trim().toLowerCase();
+    const userArea = normalizeKey(state.user.area);
     const allowed = state.cache.Sucursales.filter(function (s) {
-      return String(s.gerente_area || '').trim().toLowerCase() === userArea;
+      return normalizeKey(getField(s, ['gerentearea'])) === userArea;
     });
     const allowedIds = allowed.map(function (s) { return sucursalKey(s); }).filter(function (k) { return !!k; });
     state.cache.Sucursales = allowed;
@@ -314,15 +314,41 @@ function applyReadOnlyUI() {
 }
 
 /* ===================== HELPERS DE NOMBRES ===================== */
+/* Busca un valor en una fila sin importar cómo esté escrito el encabezado
+   en la hoja de cálculo (mayúsculas, espacios, guiones, tildes...). Google
+   Apps Script usa el texto EXACTO del encabezado como llave del objeto, y
+   en este proyecto los encabezados manuales han variado varias veces
+   ("area" vs "Area", "NOMBRE" vs "nombre", etc.), así que en vez de asumir
+   una sola escritura, normalizamos todas las llaves de la fila y buscamos
+   por alias normalizados. */
+function normalizeKey(k) { return stripAccents(String(k || '')).replace(/[^a-z0-9]/g, ''); }
+function getField(obj, aliases) {
+  if (!obj) return '';
+  const keys = Object.keys(obj);
+  for (var i = 0; i < keys.length; i++) {
+    if (aliases.indexOf(normalizeKey(keys[i])) > -1) {
+      var v = obj[keys[i]];
+      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+  }
+  return '';
+}
+
 /* Clave real de una sucursal: en la hoja Sucursales la columna "id" quedó
    vacía en todas las filas cargadas manualmente, así que usamos la columna
-   "sucursal_id" (el código tipo "SS - Escalon - L001") como identificador
+   de código de sucursal (tipo "SS - Escalon - L001") como identificador
    verdadero, con "id" solo como respaldo para filas creadas desde la app. */
-function sucursalKey(s) { return (s && (s.sucursal_id || s.id)) || ''; }
+function sucursalKey(s) { return getField(s, ['sucursalid']) || getField(s, ['id']) || ''; }
+/* Etiqueta a mostrar para una sucursal: prefiere el código real, luego el
+   campo "nombre" (que en esta hoja a veces contiene el nombre de un
+   contacto, no de la sucursal), y como último recurso la clave interna. */
+function sucursalLabel(s) {
+  return getField(s, ['sucursalid']) || getField(s, ['nombre']) || sucursalKey(s) || '(sin nombre)';
+}
 
 function sucursalNombre(id) {
   const s = id ? state.cache.Sucursales.find(function (x) { return !!sucursalKey(x) && sucursalKey(x) === id; }) : null;
-  return s ? (s.sucursal_id || s.nombre) : (id || '');
+  return s ? sucursalLabel(s) : (id || '');
 }
 function tecnicoNombre(id) {
   const t = state.cache.Tecnicos.find(function (x) { return x.id === id; });
@@ -411,11 +437,12 @@ function renderSucursalesGrid() {
   grid.innerHTML = '';
   state.cache.Sucursales.forEach(function (s) {
     const badge = document.createElement('div');
+    const estadoVal = getField(s, ['estado']);
     let cls = 'sucursal-badge';
-    if (s.estado === 'Con alerta') cls += ' alerta';
-    else if (s.estado === 'Inactiva') cls += ' inactivo';
+    if (estadoVal === 'Con alerta') cls += ' alerta';
+    else if (estadoVal === 'Inactiva') cls += ' inactivo';
     badge.className = cls;
-    badge.textContent = s.nombre;
+    badge.textContent = sucursalLabel(s);
     grid.appendChild(badge);
   });
 }
@@ -484,7 +511,7 @@ function openEntityModal(entityName, existing) {
       input = document.createElement('select');
       state.cache.Sucursales.forEach(function (s) {
         const o = document.createElement('option');
-        o.value = sucursalKey(s); o.textContent = (s.sucursal_id || s.nombre);
+        o.value = sucursalKey(s); o.textContent = sucursalLabel(s);
         input.appendChild(o);
       });
     } else {
@@ -634,7 +661,7 @@ function openOrdenModal(existing) {
   document.getElementById('ordenModalTitle').textContent = existing ? 'Editar orden' : 'Nueva orden de trabajo';
 
   const sucSelect = document.getElementById('ordenSucursal');
-  sucSelect.innerHTML = state.cache.Sucursales.map(function (s) { return '<option value="' + sucursalKey(s) + '">' + (s.sucursal_id || s.nombre) + '</option>'; }).join('');
+  sucSelect.innerHTML = state.cache.Sucursales.map(function (s) { return '<option value="' + sucursalKey(s) + '">' + sucursalLabel(s) + '</option>'; }).join('');
 
   const vehSelect = document.getElementById('ordenVehiculo');
   vehSelect.innerHTML = '<option value="">-- Ninguno --</option>' +
@@ -756,16 +783,17 @@ function renderSolicitudView() {
     const raw = String(state.user.sucursal_id || '').trim();
     const rawNorm = normalizeSucursalName(raw);
     const misucursal = raw ? sucursales.find(function (s) {
-      return (!!s.id && String(s.id) === raw) ||
-        (!!sucursalKey(s) && normalizeSucursalName(sucursalKey(s)) === rawNorm) ||
-        (!!s.nombre && normalizeSucursalName(s.nombre) === rawNorm);
+      const key = sucursalKey(s);
+      const nom = getField(s, ['nombre']);
+      return (!!key && (key === raw || normalizeSucursalName(key) === rawNorm)) ||
+        (!!nom && normalizeSucursalName(nom) === rawNorm);
     }) : null;
 
     const nombreEl = document.getElementById('solicitudSucursalNombre');
     if (misucursal) {
       state.user.sucursal_id = sucursalKey(misucursal);
       localStorage.setItem('cmms_user', JSON.stringify(state.user));
-      nombreEl.textContent = 'Sucursal: ' + (misucursal.sucursal_id || misucursal.nombre);
+      nombreEl.textContent = 'Sucursal: ' + sucursalLabel(misucursal);
     } else {
       nombreEl.textContent = raw
         ? 'No se encontró la sucursal "' + raw + '" en el catálogo de Sucursales. Verifica el valor de sucursal_id en la hoja Usuarios.'
