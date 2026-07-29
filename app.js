@@ -63,12 +63,13 @@ const ENTITIES = {
   Sucursales: {
     label: 'Sucursal',
     fields: [
-      { key: 'nombre', label: 'Nombre', type: 'text' },
+      { key: 'sucursal_id', label: 'Código de sucursal', type: 'text' },
+      { key: 'nombre', label: 'Nombre (contacto)', type: 'text' },
       { key: 'direccion', label: 'Dirección', type: 'text' },
       { key: 'ciudad', label: 'Ciudad', type: 'text' },
       { key: 'contacto', label: 'Contacto', type: 'text' },
       { key: 'telefono', label: 'Teléfono', type: 'text' },
-      { key: 'estado', label: 'Estado', type: 'select', options: ['Operativa', 'Con alerta', 'Inactiva'] },
+      { key: 'estado', label: 'Estado', type: 'select', options: ['Operativa', 'Con alerta', 'Inactiva', 'Funcionamiento'] },
       { key: 'gerente_area', label: 'Gerente de Área', type: 'text' }
     ]
   },
@@ -299,9 +300,9 @@ function applyRoleScope() {
     const allowed = state.cache.Sucursales.filter(function (s) {
       return String(s.gerente_area || '').trim().toLowerCase() === userArea;
     });
-    const allowedIds = allowed.map(function (s) { return s.id; });
+    const allowedIds = allowed.map(function (s) { return sucursalKey(s); }).filter(function (k) { return !!k; });
     state.cache.Sucursales = allowed;
-    state.cache.Ordenes = state.cache.Ordenes.filter(function (o) { return allowedIds.indexOf(o.sucursal_id) > -1; });
+    state.cache.Ordenes = state.cache.Ordenes.filter(function (o) { return !!o.sucursal_id && allowedIds.indexOf(o.sucursal_id) > -1; });
   }
 }
 
@@ -313,9 +314,15 @@ function applyReadOnlyUI() {
 }
 
 /* ===================== HELPERS DE NOMBRES ===================== */
+/* Clave real de una sucursal: en la hoja Sucursales la columna "id" quedó
+   vacía en todas las filas cargadas manualmente, así que usamos la columna
+   "sucursal_id" (el código tipo "SS - Escalon - L001") como identificador
+   verdadero, con "id" solo como respaldo para filas creadas desde la app. */
+function sucursalKey(s) { return (s && (s.sucursal_id || s.id)) || ''; }
+
 function sucursalNombre(id) {
-  const s = state.cache.Sucursales.find(function (x) { return x.id === id; });
-  return s ? s.nombre : (id || '');
+  const s = id ? state.cache.Sucursales.find(function (x) { return !!sucursalKey(x) && sucursalKey(x) === id; }) : null;
+  return s ? (s.sucursal_id || s.nombre) : (id || '');
 }
 function tecnicoNombre(id) {
   const t = state.cache.Tecnicos.find(function (x) { return x.id === id; });
@@ -477,7 +484,7 @@ function openEntityModal(entityName, existing) {
       input = document.createElement('select');
       state.cache.Sucursales.forEach(function (s) {
         const o = document.createElement('option');
-        o.value = s.id; o.textContent = s.nombre;
+        o.value = sucursalKey(s); o.textContent = (s.sucursal_id || s.nombre);
         input.appendChild(o);
       });
     } else {
@@ -627,7 +634,7 @@ function openOrdenModal(existing) {
   document.getElementById('ordenModalTitle').textContent = existing ? 'Editar orden' : 'Nueva orden de trabajo';
 
   const sucSelect = document.getElementById('ordenSucursal');
-  sucSelect.innerHTML = state.cache.Sucursales.map(function (s) { return '<option value="' + s.id + '">' + s.nombre + '</option>'; }).join('');
+  sucSelect.innerHTML = state.cache.Sucursales.map(function (s) { return '<option value="' + sucursalKey(s) + '">' + (s.sucursal_id || s.nombre) + '</option>'; }).join('');
 
   const vehSelect = document.getElementById('ordenVehiculo');
   vehSelect.innerHTML = '<option value="">-- Ninguno --</option>' +
@@ -748,15 +755,17 @@ function renderSolicitudView() {
 
     const raw = String(state.user.sucursal_id || '').trim();
     const rawNorm = normalizeSucursalName(raw);
-    const misucursal = sucursales.find(function (s) {
-      return String(s.id) === raw || normalizeSucursalName(s.nombre) === rawNorm;
-    });
+    const misucursal = raw ? sucursales.find(function (s) {
+      return (!!s.id && String(s.id) === raw) ||
+        (!!sucursalKey(s) && normalizeSucursalName(sucursalKey(s)) === rawNorm) ||
+        (!!s.nombre && normalizeSucursalName(s.nombre) === rawNorm);
+    }) : null;
 
     const nombreEl = document.getElementById('solicitudSucursalNombre');
     if (misucursal) {
-      state.user.sucursal_id = misucursal.id;
+      state.user.sucursal_id = sucursalKey(misucursal);
       localStorage.setItem('cmms_user', JSON.stringify(state.user));
-      nombreEl.textContent = 'Sucursal: ' + misucursal.nombre;
+      nombreEl.textContent = 'Sucursal: ' + (misucursal.sucursal_id || misucursal.nombre);
     } else {
       nombreEl.textContent = raw
         ? 'No se encontró la sucursal "' + raw + '" en el catálogo de Sucursales. Verifica el valor de sucursal_id en la hoja Usuarios.'
@@ -764,7 +773,7 @@ function renderSolicitudView() {
     }
 
     const misSolicitudes = ordenes.filter(function (o) {
-      return misucursal ? o.sucursal_id === misucursal.id : false;
+      return misucursal ? o.sucursal_id === sucursalKey(misucursal) : false;
     });
     renderSolicitudesTable(misSolicitudes);
   });
