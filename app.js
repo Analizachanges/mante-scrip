@@ -396,6 +396,113 @@ function renderDashboard() {
   renderChartEstado(ordenes);
   renderChartSucursal(ordenes);
   renderSucursalesGrid();
+  renderSolicitudesPanel();
+}
+
+/* ===================== PANEL DE SOLICITUDES POR SUCURSAL + INSIGHTS ===================== */
+/* Identifica si una orden viene del formulario "Reportar necesidad" (Gerente
+   de Sucursal). Preferimos la columna "origen" si existe; si la hoja Ordenes
+   todavía no la tiene, usamos una heurística de respaldo: una solicitud
+   enviada desde ese formulario siempre deja técnico, vehículo y costo vacíos. */
+function esSolicitud(o) {
+  const origen = getField(o, ['origen']);
+  if (origen) return origen === 'solicitud_sucursal';
+  return !o.tecnico_id && !o.vehiculo_id && !o.costo;
+}
+
+function renderSolicitudesPanel() {
+  const solicitudes = state.cache.Ordenes.filter(esSolicitud);
+  const bySuc = {};
+  solicitudes.forEach(function (o) {
+    const suc = o.sucursal_id || '(sin sucursal)';
+    if (!bySuc[suc]) bySuc[suc] = { total: 0, pendiente: 0, enProceso: 0, finalizado: 0, urgentesAbiertas: 0, ultima: null };
+    const g = bySuc[suc];
+    g.total++;
+    if (o.estado === 'Pendiente') g.pendiente++;
+    else if (o.estado === 'En proceso') g.enProceso++;
+    else if (o.estado === 'Finalizado') g.finalizado++;
+    if (o.prioridad === 'Alta' && o.estado !== 'Finalizado') g.urgentesAbiertas++;
+    const f = o.fecha ? new Date(o.fecha) : null;
+    if (f && !isNaN(f) && (!g.ultima || f > g.ultima)) g.ultima = f;
+  });
+
+  const table = document.getElementById('table-SolicitudesResumen');
+  if (table) {
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    thead.innerHTML = '<tr><th>Sucursal</th><th>Total</th><th>Pendientes</th><th>En proceso</th><th>Finalizadas</th><th>Urgentes abiertas</th><th>Última solicitud</th></tr>';
+
+    const rows = Object.keys(bySuc).map(function (suc) { return { suc: suc, g: bySuc[suc] }; })
+      .sort(function (a, b) { return b.g.pendiente - a.g.pendiente || b.g.total - a.g.total; });
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-muted);">Aún no hay solicitudes reportadas por sucursales.</td></tr>';
+    } else {
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + sucursalNombre(r.suc) + '</td>' +
+          '<td>' + r.g.total + '</td>' +
+          '<td>' + r.g.pendiente + '</td>' +
+          '<td>' + r.g.enProceso + '</td>' +
+          '<td>' + r.g.finalizado + '</td>' +
+          '<td>' + (r.g.urgentesAbiertas || '-') + '</td>' +
+          '<td>' + (r.g.ultima ? r.g.ultima.toLocaleDateString() : '-') + '</td></tr>';
+      }).join('');
+    }
+  }
+
+  renderInsights(solicitudes, bySuc);
+}
+
+function renderInsights(solicitudes, bySuc) {
+  const list = document.getElementById('insightsList');
+  if (!list) return;
+  const items = [];
+
+  if (!solicitudes.length) {
+    items.push('Todavía no se han registrado solicitudes de mantenimiento desde las sucursales.');
+  } else {
+    let peorSuc = null, peorPend = 0;
+    Object.keys(bySuc).forEach(function (suc) {
+      if (bySuc[suc].pendiente > peorPend) { peorPend = bySuc[suc].pendiente; peorSuc = suc; }
+    });
+    if (peorSuc && peorPend > 0) {
+      items.push('<b>' + sucursalNombre(peorSuc) + '</b> es la sucursal con más solicitudes pendientes (' + peorPend + '). Conviene priorizar su atención.');
+    }
+
+    const hoy = new Date();
+    const pendientesViejas = solicitudes.filter(function (o) {
+      if (o.estado === 'Finalizado' || !o.fecha) return false;
+      const f = new Date(o.fecha);
+      if (isNaN(f)) return false;
+      return (hoy - f) / 86400000 > 7;
+    });
+    if (pendientesViejas.length) {
+      items.push(pendientesViejas.length + ' solicitud(es) llevan más de 7 días abiertas sin cerrarse. Riesgo de acumulación de mantenimiento correctivo.');
+    }
+
+    const urgentesAbiertas = solicitudes.filter(function (o) { return o.prioridad === 'Alta' && o.estado !== 'Finalizado'; });
+    if (urgentesAbiertas.length) {
+      items.push(urgentesAbiertas.length + ' solicitud(es) marcadas como urgentes siguen abiertas.');
+    }
+
+    const porTipo = {};
+    solicitudes.forEach(function (o) { const t = o.tipo || 'Sin tipo'; porTipo[t] = (porTipo[t] || 0) + 1; });
+    const tipoTop = Object.keys(porTipo).sort(function (a, b) { return porTipo[b] - porTipo[a]; })[0];
+    if (tipoTop) {
+      const pct = Math.round((porTipo[tipoTop] / solicitudes.length) * 100);
+      items.push('El ' + pct + '% de las solicitudes son de tipo "' + tipoTop + '"' +
+        (tipoTop === 'Correctivo' ? ' — conviene reforzar el mantenimiento preventivo para reducir fallas reactivas.' : '.'));
+    }
+
+    const finalizadas = solicitudes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
+    const tasaResolucion = Math.round((finalizadas / solicitudes.length) * 100);
+    items.push('Tasa de resolución de solicitudes: ' + tasaResolucion + '% (' + finalizadas + ' de ' + solicitudes.length + ').');
+
+    const sucursalesConSolicitud = Object.keys(bySuc).length;
+    items.push(sucursalesConSolicitud + ' sucursal(es) han reportado al menos una solicitud de mantenimiento.');
+  }
+
+  list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');
 }
 
 function renderChartEstado(ordenes) {
@@ -852,7 +959,15 @@ function enviarSolicitud() {
     fecha_cierre: '',
     costo: '',
     firma: '',
-    observaciones: ''
+    observaciones: '',
+    // Marca el origen para poder distinguir en el dashboard las solicitudes
+    // enviadas por un Gerente de Sucursal de las órdenes creadas directamente
+    // por Administrador/Supervisor. Si tu hoja Ordenes no tiene columna
+    // "origen" o "reportado_por", Apps Script simplemente ignora estos
+    // valores (no rompe nada); agrégalas para que el panel de solicitudes
+    // y los insights funcionen.
+    origen: 'solicitud_sucursal',
+    reportado_por: state.user.nombre || ''
   };
 
   apiCall('create', 'Ordenes', data).then(function () {
