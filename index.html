@@ -276,6 +276,28 @@
   </div>
 </div>
 
+<!-- ============ MODAL FIRMA Y CIERRE RÁPIDO (Gerente de Área) ============ -->
+<div id="cierreModalOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Cerrar orden</h3>
+      <button id="cierreModalClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:0;">Firma para dar por cerrada esta orden de trabajo.</p>
+      <label>Firma digital</label>
+      <div class="signature-box">
+        <canvas id="cierreSignaturePad" width="500" height="150"></canvas>
+        <button type="button" class="btn btn-ghost btn-sm" id="clearCierreSignature">Limpiar firma</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cierreCancel">Cancelar</button>
+      <button class="btn btn-primary" id="cierreConfirmar">Confirmar cierre</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
