@@ -749,7 +749,9 @@ function renderOrdenesTable() {
   let ordenes = state.cache.Ordenes.slice();
   if (filtro) ordenes = ordenes.filter(function (o) { return o.estado === filtro; });
 
-  const fullEdit = !isReadOnly();
+  // El Técnico puede ver sus órdenes asignadas, pero no editarlas ni
+  // eliminarlas — solo consulta.
+  const fullEdit = !isReadOnly() && !isTecnico();
   const quickActions = isAreaManager();
 
   thead.innerHTML = '<tr><th>Fecha</th><th>Sucursal</th><th>Tipo</th><th>Descripción</th><th>Técnico</th><th>Estado</th><th>Prioridad</th><th>Costo</th><th>Tiempo de espera</th>' +
