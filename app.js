@@ -859,21 +859,46 @@ function cerrarCierreModal() {
   cierreOrdenId = null;
 }
 
+function refrescarVistaTrasOrden() {
+  return state.currentView === 'solicitud' ? renderSolicitudView() : refreshOrdenesForRole().then(renderOrdenesTable);
+}
+
 function confirmarCierre() {
   if (!cierreOrdenId) return;
+  const idQueSeEstaCerrando = cierreOrdenId;
   const canvas = document.getElementById('cierreSignaturePad');
   const firma = compressedSignatureDataUrl(canvas);
   apiCall('update', 'Ordenes', {
-    id: cierreOrdenId,
+    id: idQueSeEstaCerrando,
     estado: 'Finalizado',
     fecha_cierre: new Date().toISOString(),
     firma: firma
   }).then(function () {
-    // Refresca la vista que corresponda según quién esté cerrando la orden.
-    return state.currentView === 'solicitud' ? renderSolicitudView() : refreshOrdenesForRole().then(renderOrdenesTable);
+    return refrescarVistaTrasOrden();
   }).then(function () {
     cerrarCierreModal();
-  }).catch(function (err) { alert('Error al cerrar la orden: ' + err.message); });
+  }).catch(function () {
+    // En conexiones móviles inestables, a veces el navegador reporta "error
+    // de red" aunque Apps Script sí haya terminado de guardar el cambio
+    // (el servidor sigue ejecutando aunque el cliente pierda la conexión).
+    // Antes de avisar que falló, verificamos directamente contra el
+    // servidor si la orden realmente quedó cerrada.
+    verificarCierre(idQueSeEstaCerrando);
+  });
+}
+
+function verificarCierre(id) {
+  refreshSheet('Ordenes').then(function () {
+    const orden = state.cache.Ordenes.find(function (o) { return o.id === id; });
+    if (orden && orden.estado === 'Finalizado') {
+      if (isAreaManager()) applyRoleScope();
+      if (isTecnico()) applyTecnicoScope();
+      return refrescarVistaTrasOrden().then(function () { cerrarCierreModal(); });
+    }
+    alert('Error al cerrar la orden: no se pudo confirmar con el servidor. Verifica tu conexión e intenta de nuevo.');
+  }).catch(function () {
+    alert('Error al cerrar la orden: no se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.');
+  });
 }
 
 /* ===================== MODAL ORDEN DE TRABAJO ===================== */
