@@ -15,6 +15,10 @@ const CONFIG = {
 /* ===================== ESTADO GLOBAL ===================== */
 const state = {
   user: null,
+  // Se incrementa en cada login/logout para poder detectar y descartar
+  // resultados de una carga (loadAll) que quedó "en vuelo" de una sesión
+  // anterior si el usuario cierra sesión y entra de nuevo muy rápido.
+  sessionId: 0,
   cache: {
     Sucursales: [], Tecnicos: [], Vehiculos: [], Ordenes: [], Inventario: [], Preventivo: []
   },
@@ -208,6 +212,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.getElementById('logoutBtn').addEventListener('click', function () {
+    state.sessionId++; // invalida cualquier carga (loadAll) que haya quedado en vuelo
     localStorage.removeItem('cmms_user');
     state.user = null;
     document.getElementById('app').classList.add('hidden');
@@ -230,6 +235,9 @@ function tryAutoLogin() {
 
 /* ===================== ARRANQUE DE LA APP ===================== */
 function startApp() {
+  state.sessionId++;
+  const mySession = state.sessionId;
+
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('sidebarUser').textContent = state.user.nombre + ' · ' + state.user.rol;
@@ -241,6 +249,11 @@ function startApp() {
   }
 
   loadAll().then(function () {
+    // Si mientras se cargaban los datos el usuario cerró sesión y entró de
+    // nuevo (u otra sesión empezó), este resultado ya quedó obsoleto: no lo
+    // apliques, para no pisar el estado de la sesión actual ni crashear
+    // leyendo un state.user que ya cambió.
+    if (mySession !== state.sessionId || !state.user) return;
     applyRoleScope();
     applyTecnicoScope();
     applyReadOnlyUI();
@@ -299,6 +312,7 @@ function refreshSheet(name) {
 
 /* ===================== ALCANCE POR ROL (Gerente de Área) ===================== */
 function applyRoleScope() {
+  if (!state.user) return;
   if (state.user.rol === 'Gerente de Área' && state.user.area) {
     const userArea = normalizeKey(state.user.area);
     const allowed = state.cache.Sucursales.filter(function (s) {
