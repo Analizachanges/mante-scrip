@@ -585,17 +585,25 @@ function renderChartSucursal(ordenes) {
   });
 }
 
+/* El color de cada sucursal refleja sus órdenes de trabajo abiertas (no el
+   campo "estado" de la hoja Sucursales, que casi nunca varía): rojo si
+   tiene alguna urgente sin resolver, naranja si tiene pendientes, azul si
+   tiene en proceso, verde si no tiene nada abierto. */
 function renderSucursalesGrid() {
   const grid = document.getElementById('sucursalesGrid');
   if (!grid) return;
   grid.innerHTML = '';
+  const ordenes = state.cache.Ordenes;
   state.cache.Sucursales.forEach(function (s) {
-    const badge = document.createElement('div');
-    const estadoVal = getField(s, ['estado']);
+    const key = sucursalKey(s);
+    const abiertas = key ? ordenes.filter(function (o) { return o.sucursal_id === key && o.estado !== 'Finalizado'; }) : [];
     let cls = 'sucursal-badge';
-    if (estadoVal === 'Con alerta') cls += ' alerta';
-    else if (estadoVal === 'Inactiva') cls += ' inactivo';
+    if (abiertas.some(function (o) { return o.prioridad === 'Alta'; })) cls += ' urgente';
+    else if (abiertas.some(function (o) { return o.estado === 'Pendiente'; })) cls += ' pendiente';
+    else if (abiertas.some(function (o) { return o.estado === 'En proceso'; })) cls += ' enproceso';
+    const badge = document.createElement('div');
     badge.className = cls;
+    badge.title = abiertas.length + ' orden(es) abierta(s)';
     badge.textContent = sucursalLabel(s);
     grid.appendChild(badge);
   });
