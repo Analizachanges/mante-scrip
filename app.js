@@ -36,6 +36,7 @@ function normalizeUser(u) {
   u.rol = canonicalRole(u.rol);
   u.area = String(u.area || '').trim();
   u.sucursal_id = String(u.sucursal_id || '').trim();
+  u.tecnico_id = String(u.tecnico_id || '').trim();
   u.nombre = String(u.nombre || '').trim();
   return u;
 }
@@ -45,10 +46,12 @@ const READ_ONLY_ROLES = ['Consulta', 'Gerente de Área'];
 function isReadOnly() { return !!(state.user && READ_ONLY_ROLES.indexOf(state.user.rol) > -1); }
 function isAreaManager() { return !!(state.user && state.user.rol === 'Gerente de Área'); }
 function isFullAccess() { return !!(state.user && FULL_ACCESS_ROLES.indexOf(state.user.rol) > -1); }
+function isTecnico() { return !!(state.user && state.user.rol === 'Técnico'); }
+function isOperaciones() { return !!(state.user && state.user.rol === 'Gerente de Operaciones'); }
 
 /* ===================== MENÚ LATERAL ===================== */
 const MENU = [
-  { id: 'dashboard', label: 'Dashboard', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Gerente de Área', 'Consulta', 'Técnico'] },
+  { id: 'dashboard', label: 'Dashboard', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Gerente de Área', 'Consulta'] },
   { id: 'ordenes', label: 'Órdenes de trabajo', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Técnico', 'Consulta', 'Gerente de Área'] },
   { id: 'sucursales', label: 'Sucursales', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Gerente de Área', 'Consulta'] },
   { id: 'tecnicos', label: 'Técnicos', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor'] },
@@ -239,8 +242,9 @@ function startApp() {
 
   loadAll().then(function () {
     applyRoleScope();
+    applyTecnicoScope();
     applyReadOnlyUI();
-    switchView('dashboard');
+    switchView(isTecnico() ? 'ordenes' : 'dashboard');
   }).catch(function (err) {
     console.error('Error cargando datos:', err);
   });
@@ -304,6 +308,35 @@ function applyRoleScope() {
     state.cache.Sucursales = allowed;
     state.cache.Ordenes = state.cache.Ordenes.filter(function (o) { return !!o.sucursal_id && allowedIds.indexOf(o.sucursal_id) > -1; });
   }
+}
+
+/* ===================== ALCANCE POR ROL (Técnico) =====================
+   Un Técnico solo debe ver las órdenes que tiene asignadas. Para saber
+   cuál es "su" técnico dentro de la hoja Tecnicos, el usuario debe tener
+   en la hoja Usuarios una columna "tecnico_id" con el id o el nombre del
+   técnico (tal como aparece en la hoja Tecnicos) — funciona igual que
+   sucursal_id para Gerente de Sucursal. */
+function tecnicoKey(t) { return getField(t, ['id']) || ''; }
+
+function miTecnicoId() {
+  const raw = String(state.user.tecnico_id || '').trim();
+  if (!raw) return '';
+  const rawNorm = normalizeSucursalName(raw);
+  const match = state.cache.Tecnicos.find(function (t) {
+    const key = tecnicoKey(t);
+    const nom = getField(t, ['nombre']);
+    return (!!key && (key === raw || normalizeSucursalName(key) === rawNorm)) ||
+      (!!nom && normalizeSucursalName(nom) === rawNorm);
+  });
+  return match ? tecnicoKey(match) : raw;
+}
+
+function applyTecnicoScope() {
+  if (!isTecnico()) return;
+  const miId = miTecnicoId();
+  state.cache.Ordenes = miId
+    ? state.cache.Ordenes.filter(function (o) { return o.tecnico_id === miId; })
+    : [];
 }
 
 function applyReadOnlyUI() {
@@ -678,6 +711,36 @@ function exportCSV(entityName) {
 }
 
 /* ===================== ÓRDENES DE TRABAJO ===================== */
+/* Días transcurridos desde que se creó la orden hasta que se cerró (o hasta
+   hoy si sigue abierta), y una clase de color según qué tan urgente es la
+   espera. Esto también sirve como indicador de "tiempo de espera" para
+   priorizar qué órdenes atender primero. */
+function tiempoEsperaInfo(o) {
+  if (!o.fecha) return { texto: '-', clase: '' };
+  const inicio = new Date(o.fecha);
+  if (isNaN(inicio)) return { texto: '-', clase: '' };
+  const finalizado = o.estado === 'Finalizado';
+  let fin = new Date();
+  if (finalizado && o.fecha_cierre) {
+    const fc = new Date(o.fecha_cierre);
+    if (!isNaN(fc)) fin = fc;
+  }
+  const dias = Math.max(0, Math.round((fin - inicio) / 86400000));
+  if (finalizado) {
+    return { texto: dias + ' día(s) (resuelto)', clase: 'tiempo-ok' };
+  }
+  let clase = 'tiempo-ok';
+  if (dias > 5) clase = 'tiempo-critico';
+  else if (dias >= 2) clase = 'tiempo-alerta';
+  return { texto: dias + ' día(s) esperando', clase: clase };
+}
+
+function ordenRowClass(o) {
+  if (o.estado === 'Finalizado') return 'orden-finalizado';
+  if (o.estado === 'En proceso') return 'orden-enproceso';
+  return 'orden-pendiente';
+}
+
 function renderOrdenesTable() {
   const table = document.getElementById('table-Ordenes');
   const thead = table.querySelector('thead');
@@ -689,12 +752,14 @@ function renderOrdenesTable() {
   const fullEdit = !isReadOnly();
   const quickActions = isAreaManager();
 
-  thead.innerHTML = '<tr><th>Fecha</th><th>Sucursal</th><th>Tipo</th><th>Descripción</th><th>Técnico</th><th>Estado</th><th>Prioridad</th><th>Costo</th>' +
+  thead.innerHTML = '<tr><th>Fecha</th><th>Sucursal</th><th>Tipo</th><th>Descripción</th><th>Técnico</th><th>Estado</th><th>Prioridad</th><th>Costo</th><th>Tiempo de espera</th>' +
     ((fullEdit || quickActions) ? '<th>Acciones</th>' : '') + '</tr>';
 
   tbody.innerHTML = '';
   ordenes.forEach(function (o) {
     const tr = document.createElement('tr');
+    tr.className = ordenRowClass(o);
+    const tiempo = tiempoEsperaInfo(o);
     tr.innerHTML =
       '<td>' + (o.fecha ? new Date(o.fecha).toLocaleDateString() : '') + '</td>' +
       '<td>' + sucursalNombre(o.sucursal_id) + '</td>' +
@@ -703,7 +768,8 @@ function renderOrdenesTable() {
       '<td>' + tecnicoNombre(o.tecnico_id) + '</td>' +
       '<td><span class="badge badge-' + String(o.estado || '').toLowerCase().replace(/\s+/g, '') + '">' + (o.estado || '') + '</span></td>' +
       '<td>' + (o.prioridad || '') + '</td>' +
-      '<td>' + (o.costo ? '$' + Number(o.costo).toFixed(2) : '') + '</td>';
+      '<td>' + (o.costo ? '$' + Number(o.costo).toFixed(2) : '') + '</td>' +
+      '<td class="' + tiempo.clase + '">' + tiempo.texto + '</td>';
 
     if (fullEdit) {
       const td = document.createElement('td');
@@ -748,7 +814,10 @@ function renderOrdenesTable() {
 }
 
 function refreshOrdenesForRole() {
-  return refreshSheet('Ordenes').then(function () { if (isAreaManager()) applyRoleScope(); });
+  return refreshSheet('Ordenes').then(function () {
+    if (isAreaManager()) applyRoleScope();
+    if (isTecnico()) applyTecnicoScope();
+  });
 }
 
 function marcarOrden(id, campo, valor) {
@@ -789,6 +858,11 @@ function openOrdenModal(existing) {
     vehSelect.value = existing.vehiculo_id || '';
     tecSelect.value = existing.tecnico_id || '';
   }
+
+  // El Gerente de Operaciones no puede reasignar una orden ya existente a
+  // otra sucursal — la sucursal queda fija, solo puede asignar/cambiar
+  // técnico y los demás campos. Al crear una orden nueva sí puede elegirla.
+  sucSelect.disabled = !!(existing && isOperaciones());
 
   clearSignaturePad();
   if (existing && existing.firma) {
