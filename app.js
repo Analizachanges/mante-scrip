@@ -862,7 +862,7 @@ function cerrarCierreModal() {
 function confirmarCierre() {
   if (!cierreOrdenId) return;
   const canvas = document.getElementById('cierreSignaturePad');
-  const firma = canvas.toDataURL('image/png');
+  const firma = compressedSignatureDataUrl(canvas);
   apiCall('update', 'Ordenes', {
     id: cierreOrdenId,
     estado: 'Finalizado',
@@ -940,7 +940,7 @@ function saveOrden() {
     costo: document.getElementById('ordenCosto').value,
     descripcion: document.getElementById('ordenDescripcion').value,
     observaciones: document.getElementById('ordenObservaciones').value,
-    firma: canvas.toDataURL('image/png')
+    firma: compressedSignatureDataUrl(canvas)
   };
   if (state.editing && state.editing.id) {
     data.id = state.editing.id;
@@ -957,6 +957,27 @@ function saveOrden() {
 }
 
 /* ===================== FIRMA DIGITAL (canvas) ===================== */
+/* La firma viaja dentro de la URL (JSONP no admite POST de verdad), así que
+   si el canvas se exporta a tamaño completo la imagen puede superar el
+   límite de longitud de URL y fallar con "Error de red" (más frecuente en
+   datos móviles). Para evitarlo, la reescalamos a una resolución más chica
+   antes de convertirla a data URL, y si aun así queda pesada, la reducimos
+   todavía más. */
+function compressedSignatureDataUrl(canvas) {
+  function scaleTo(width) {
+    const scale = width / canvas.width;
+    const tmp = document.createElement('canvas');
+    tmp.width = Math.max(1, Math.round(canvas.width * scale));
+    tmp.height = Math.max(1, Math.round(canvas.height * scale));
+    tmp.getContext('2d').drawImage(canvas, 0, 0, tmp.width, tmp.height);
+    return tmp.toDataURL('image/png');
+  }
+  let data = scaleTo(260);
+  if (data.length > 6000) data = scaleTo(160);
+  if (data.length > 6000) data = scaleTo(100);
+  return data;
+}
+
 function setupSignaturePad(canvasId) {
   const canvas = document.getElementById(canvasId || 'signaturePad');
   if (!canvas) return;
