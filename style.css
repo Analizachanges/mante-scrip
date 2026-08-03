@@ -117,6 +117,19 @@ tr:hover td { background: #f9fbfd; }
 .badge-finalizado { background: #e8f5e9; color: #2e7d32; }
 .row-actions button { border: none; background: none; font-size: 15px; margin-right: 6px; }
 
+/* Color de fila según el proceso de la orden */
+tr.orden-pendiente td { background: #fff8ec; }
+tr.orden-enproceso td { background: #eef6fc; }
+tr.orden-finalizado td { background: #eefaf1; }
+tr.orden-pendiente:hover td { background: #fdf0d8; }
+tr.orden-enproceso:hover td { background: #e0eefa; }
+tr.orden-finalizado:hover td { background: #e2f5e8; }
+
+/* Tiempo de espera de una orden */
+.tiempo-ok { color: var(--success); font-weight: 600; }
+.tiempo-alerta { color: var(--warning); font-weight: 600; }
+.tiempo-critico { color: var(--danger); font-weight: 600; }
+
 /* ---------- BUTTONS ---------- */
 .btn { padding: 9px 16px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; }
 .btn-primary { background: var(--primary); color: #fff; }
