@@ -819,7 +819,7 @@ function renderOrdenesTable() {
       if (o.estado !== 'Finalizado') {
         const closeBtn = document.createElement('button');
         closeBtn.textContent = '✅ Cerrado';
-        closeBtn.addEventListener('click', function () { marcarOrdenCerrada(o.id); });
+        closeBtn.addEventListener('click', function () { abrirCierreModal(o.id); });
         td.appendChild(closeBtn);
       }
       tr.appendChild(td);
@@ -842,9 +842,38 @@ function marcarOrden(id, campo, valor) {
   apiCall('update', 'Ordenes', data).then(refreshOrdenesForRole).then(renderOrdenesTable);
 }
 
-function marcarOrdenCerrada(id) {
-  apiCall('update', 'Ordenes', { id: id, estado: 'Finalizado', fecha_cierre: new Date().toISOString() })
-    .then(refreshOrdenesForRole).then(renderOrdenesTable);
+/* ===================== MODAL FIRMA Y CIERRE RÁPIDO =====================
+   Lo usan: el botón "Cerrado" del Gerente de Área en Órdenes de trabajo, y
+   el botón "Cerrado" del Gerente de Sucursal en "Mis solicitudes" (para que
+   quien reportó la necesidad confirme y firme que ya se resolvió). */
+let cierreOrdenId = null;
+
+function abrirCierreModal(id) {
+  cierreOrdenId = id;
+  clearCierreSignaturePad();
+  document.getElementById('cierreModalOverlay').classList.remove('hidden');
+}
+
+function cerrarCierreModal() {
+  document.getElementById('cierreModalOverlay').classList.add('hidden');
+  cierreOrdenId = null;
+}
+
+function confirmarCierre() {
+  if (!cierreOrdenId) return;
+  const canvas = document.getElementById('cierreSignaturePad');
+  const firma = canvas.toDataURL('image/png');
+  apiCall('update', 'Ordenes', {
+    id: cierreOrdenId,
+    estado: 'Finalizado',
+    fecha_cierre: new Date().toISOString(),
+    firma: firma
+  }).then(function () {
+    // Refresca la vista que corresponda según quién esté cerrando la orden.
+    return state.currentView === 'solicitud' ? renderSolicitudView() : refreshOrdenesForRole().then(renderOrdenesTable);
+  }).then(function () {
+    cerrarCierreModal();
+  }).catch(function (err) { alert('Error al cerrar la orden: ' + err.message); });
 }
 
 /* ===================== MODAL ORDEN DE TRABAJO ===================== */
@@ -928,8 +957,8 @@ function saveOrden() {
 }
 
 /* ===================== FIRMA DIGITAL (canvas) ===================== */
-function setupSignaturePad() {
-  const canvas = document.getElementById('signaturePad');
+function setupSignaturePad(canvasId) {
+  const canvas = document.getElementById(canvasId || 'signaturePad');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   ctx.strokeStyle = '#1f2937';
@@ -957,12 +986,14 @@ function setupSignaturePad() {
   canvas.addEventListener('touchend', end);
 }
 
-function clearSignaturePad() {
-  const canvas = document.getElementById('signaturePad');
+function clearSignaturePad(canvasId) {
+  const canvas = document.getElementById(canvasId || 'signaturePad');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
+
+function clearCierreSignaturePad() { clearSignaturePad('cierreSignaturePad'); }
 
 /* ===================== VISTA "REPORTAR NECESIDAD" (Gerente de Sucursal) =====================
    FIX: la hoja Usuarios a veces trae en sucursal_id el NOMBRE de la sucursal
@@ -1008,13 +1039,22 @@ function renderSolicitudesTable(rows) {
   const table = document.getElementById('table-Solicitudes');
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
-  thead.innerHTML = '<tr><th>Fecha</th><th>Tipo</th><th>Prioridad</th><th>Descripción</th><th>Estado</th></tr>';
+  thead.innerHTML = '<tr><th>Fecha</th><th>Tipo</th><th>Prioridad</th><th>Descripción</th><th>Estado</th><th>Acciones</th></tr>';
   tbody.innerHTML = '';
   rows.slice().reverse().forEach(function (o) {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td>' + (o.fecha ? new Date(o.fecha).toLocaleDateString() : '') + '</td>' +
       '<td>' + (o.tipo || '') + '</td><td>' + (o.prioridad || '') + '</td><td>' + (o.descripcion || '') + '</td>' +
       '<td><span class="badge badge-' + String(o.estado || '').toLowerCase().replace(/\s+/g, '') + '">' + (o.estado || '') + '</span></td>';
+    const td = document.createElement('td');
+    td.className = 'row-actions';
+    if (o.estado !== 'Finalizado') {
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✅ Cerrado';
+      closeBtn.addEventListener('click', function () { abrirCierreModal(o.id); });
+      td.appendChild(closeBtn);
+    }
+    tr.appendChild(td);
     tbody.appendChild(tr);
   });
 }
@@ -1096,9 +1136,15 @@ function wireGlobalUI() {
   document.getElementById('ordenCancel').addEventListener('click', closeOrdenModal);
   document.getElementById('ordenSave').addEventListener('click', saveOrden);
   document.getElementById('ordenPrint').addEventListener('click', function () { window.print(); });
-  document.getElementById('clearSignature').addEventListener('click', clearSignaturePad);
+  document.getElementById('clearSignature').addEventListener('click', function () { clearSignaturePad(); });
 
   document.getElementById('btnEnviarSolicitud').addEventListener('click', enviarSolicitud);
 
+  document.getElementById('cierreModalClose').addEventListener('click', cerrarCierreModal);
+  document.getElementById('cierreCancel').addEventListener('click', cerrarCierreModal);
+  document.getElementById('cierreConfirmar').addEventListener('click', confirmarCierre);
+  document.getElementById('clearCierreSignature').addEventListener('click', clearCierreSignaturePad);
+
   setupSignaturePad();
+  setupSignaturePad('cierreSignaturePad');
 }
