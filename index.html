@@ -83,6 +83,31 @@
           <div id="sucursalesGrid" class="sucursales-grid"></div>
         </div>
 
+        <div class="chart-card hidden" id="panelGestionCard">
+          <h3>Panel de gestión</h3>
+          <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-value" id="gkSolicitados">0</div><div class="kpi-label">Mantenimientos solicitados</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gkTerminados">0</div><div class="kpi-label">Terminados</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gkPendientes">0</div><div class="kpi-label">Pendientes</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gkAtrasados">0</div><div class="kpi-label">Atrasados (+5 días)</div></div>
+          </div>
+          <p id="gkTendencia" style="font-size:13px;margin:10px 0 16px;"></p>
+          <div class="chart-grid">
+            <div>
+              <h4 style="margin:0 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Sucursales con más problemas</h4>
+              <ol id="gkTopSucursales" style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;"></ol>
+            </div>
+            <div>
+              <h4 style="margin:0 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Carga por técnico (órdenes abiertas)</h4>
+              <ol id="gkTopTecnicos" style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;"></ol>
+            </div>
+          </div>
+          <h4 style="margin:16px 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Órdenes atrasadas</h4>
+          <div class="table-wrap">
+            <table id="table-Atrasadas"><thead></thead><tbody></tbody></table>
+          </div>
+        </div>
+
         <div class="chart-card">
           <h3>Solicitudes de mantenimiento por sucursal</h3>
           <p style="color:var(--text-muted);font-size:12px;margin-top:-6px;">Necesidades reportadas por los Gerentes de Sucursal y su avance.</p>
