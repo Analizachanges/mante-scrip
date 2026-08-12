@@ -444,6 +444,126 @@ function renderDashboard() {
   renderChartSucursal(ordenes);
   renderSucursalesGrid();
   renderSolicitudesPanel();
+  renderPanelGestion();
+}
+
+/* ===================== PANEL DE GESTIÓN (Gerente de Área / Operaciones) =====================
+   Responde: cuántos mantenimientos solicitaron, cuántos se terminaron,
+   cuántos quedan pendientes, cuáles están atrasados, qué sucursales tienen
+   más problemas, qué técnico tiene más carga, y si se está mejorando o
+   empeorando respecto al mes anterior. */
+const ROLES_PANEL_GESTION = ['Administrador', 'Gerente de Operaciones', 'Gerente de Área'];
+function mostrarPanelGestion() { return !!(state.user && ROLES_PANEL_GESTION.indexOf(state.user.rol) > -1); }
+
+function renderPanelGestion() {
+  const card = document.getElementById('panelGestionCard');
+  if (!card) return;
+  if (!mostrarPanelGestion()) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+
+  const ordenes = state.cache.Ordenes;
+  const solicitados = ordenes.length;
+  const terminados = ordenes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
+  const pendientes = ordenes.filter(function (o) { return o.estado !== 'Finalizado'; }).length;
+
+  const hoy = new Date();
+  const atrasadas = ordenes.filter(function (o) {
+    if (o.estado === 'Finalizado' || !o.fecha) return false;
+    const f = new Date(o.fecha);
+    return !isNaN(f) && (hoy - f) / 86400000 > 5;
+  });
+
+  document.getElementById('gkSolicitados').textContent = solicitados;
+  document.getElementById('gkTerminados').textContent = terminados;
+  document.getElementById('gkPendientes').textContent = pendientes;
+  document.getElementById('gkAtrasados').textContent = atrasadas.length;
+
+  // Sucursales con más problemas (por cantidad total de órdenes)
+  const porSucursal = {};
+  ordenes.forEach(function (o) { if (o.sucursal_id) porSucursal[o.sucursal_id] = (porSucursal[o.sucursal_id] || 0) + 1; });
+  const topSucursales = Object.keys(porSucursal)
+    .map(function (id) { return { id: id, count: porSucursal[id] }; })
+    .sort(function (a, b) { return b.count - a.count; })
+    .slice(0, 5);
+  document.getElementById('gkTopSucursales').innerHTML = topSucursales.length
+    ? topSucursales.map(function (x) { return '<li>' + sucursalNombre(x.id) + ' — ' + x.count + ' orden(es)</li>'; }).join('')
+    : '<li style="color:var(--text-muted);">Sin datos todavía.</li>';
+
+  // Carga por técnico (solo órdenes abiertas asignadas)
+  const porTecnicoAbiertas = {};
+  ordenes.forEach(function (o) {
+    if (o.tecnico_id && o.estado !== 'Finalizado') porTecnicoAbiertas[o.tecnico_id] = (porTecnicoAbiertas[o.tecnico_id] || 0) + 1;
+  });
+  const topTecnicos = Object.keys(porTecnicoAbiertas)
+    .map(function (id) { return { id: id, count: porTecnicoAbiertas[id] }; })
+    .sort(function (a, b) { return b.count - a.count; })
+    .slice(0, 5);
+  document.getElementById('gkTopTecnicos').innerHTML = topTecnicos.length
+    ? topTecnicos.map(function (x) { return '<li>' + tecnicoNombre(x.id) + ' — ' + x.count + ' orden(es) abiertas</li>'; }).join('')
+    : '<li style="color:var(--text-muted);">Sin datos todavía.</li>';
+
+  // Tabla de órdenes atrasadas
+  const table = document.getElementById('table-Atrasadas');
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = '<tr><th>Sucursal</th><th>Descripción</th><th>Técnico</th><th>Días abierta</th><th>Prioridad</th></tr>';
+  if (!atrasadas.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted);">No hay órdenes atrasadas.</td></tr>';
+  } else {
+    tbody.innerHTML = atrasadas
+      .slice()
+      .sort(function (a, b) { return new Date(a.fecha) - new Date(b.fecha); })
+      .map(function (o) {
+        const dias = Math.round((hoy - new Date(o.fecha)) / 86400000);
+        return '<tr><td>' + sucursalNombre(o.sucursal_id) + '</td><td>' + (o.descripcion || '') + '</td><td>' +
+          tecnicoNombre(o.tecnico_id) + '</td><td class="tiempo-critico">' + dias + ' día(s)</td><td>' + (o.prioridad || '') + '</td></tr>';
+      }).join('');
+  }
+
+  renderTendenciaMensual(ordenes);
+}
+
+function renderTendenciaMensual(ordenes) {
+  const el = document.getElementById('gkTendencia');
+  if (!el) return;
+  const hoy = new Date();
+  const inicioMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const finMesActual = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const inicioMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+
+  function terminadasEnRango(desde, hasta) {
+    return ordenes.filter(function (o) {
+      if (o.estado !== 'Finalizado' || !o.fecha_cierre) return false;
+      const fc = new Date(o.fecha_cierre);
+      return !isNaN(fc) && fc >= desde && fc < hasta;
+    }).length;
+  }
+
+  const terminadasMesActual = terminadasEnRango(inicioMesActual, finMesActual);
+  const terminadasMesAnterior = terminadasEnRango(inicioMesAnterior, inicioMesActual);
+
+  if (!terminadasMesActual && !terminadasMesAnterior) {
+    el.textContent = 'Todavía no hay suficiente historial de cierres para comparar con el mes anterior.';
+    el.style.color = 'var(--text-muted)';
+    return;
+  }
+  if (!terminadasMesAnterior) {
+    el.textContent = '📈 Este mes se han cerrado ' + terminadasMesActual + ' orden(es) (el mes anterior no se cerró ninguna).';
+    el.style.color = 'var(--success)';
+    return;
+  }
+
+  const cambio = Math.round(((terminadasMesActual - terminadasMesAnterior) / terminadasMesAnterior) * 100);
+  if (cambio > 0) {
+    el.textContent = '📈 Mejorando: ' + terminadasMesActual + ' órdenes cerradas este mes vs ' + terminadasMesAnterior + ' el mes anterior (+' + cambio + '%).';
+    el.style.color = 'var(--success)';
+  } else if (cambio < 0) {
+    el.textContent = '📉 Empeorando: ' + terminadasMesActual + ' órdenes cerradas este mes vs ' + terminadasMesAnterior + ' el mes anterior (' + cambio + '%).';
+    el.style.color = 'var(--danger)';
+  } else {
+    el.textContent = '➡️ Igual que el mes anterior: ' + terminadasMesActual + ' órdenes cerradas.';
+    el.style.color = 'var(--text-muted)';
+  }
 }
 
 /* ===================== PANEL DE SOLICITUDES POR SUCURSAL + INSIGHTS ===================== */
