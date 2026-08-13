@@ -402,6 +402,11 @@ function tecnicoNombre(id) {
   return t ? t.nombre : (id || '-');
 }
 
+/* Una orden se considera "abierta" (todavía requiere atención) si no está
+   Finalizada ni Cancelada. Cancelado se trata como cerrada para efectos de
+   pendientes/atrasadas/carga, pero no cuenta como un trabajo completado. */
+function esOrdenAbierta(o) { return o.estado !== 'Finalizado' && o.estado !== 'Cancelado'; }
+
 /* ===================== DASHBOARD ===================== */
 let chartEstadoInstance = null;
 let chartSucursalInstance = null;
@@ -411,7 +416,7 @@ function renderDashboard() {
   const vehiculos = state.cache.Vehiculos;
   const scoped = state.user.rol === 'Gerente de Área';
 
-  const abiertas = ordenes.filter(function (o) { return o.estado !== 'Finalizado'; }).length;
+  const abiertas = ordenes.filter(function (o) { return esOrdenAbierta(o); }).length;
   const cerradas = ordenes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
 
   const tiempos = ordenes
@@ -447,13 +452,65 @@ function renderDashboard() {
   renderPanelGestion();
 }
 
-/* ===================== PANEL DE GESTIÓN (Gerente de Área / Operaciones) =====================
-   Responde: cuántos mantenimientos solicitaron, cuántos se terminaron,
-   cuántos quedan pendientes, cuáles están atrasados, qué sucursales tienen
-   más problemas, qué técnico tiene más carga, y si se está mejorando o
-   empeorando respecto al mes anterior. */
+/* ===================== VISTA GERENCIAL (Gerente de Área / Operaciones / Administrador) =====================
+   Panel estilo "Dashboard de mantenimiento — Vista gerencial": KPIs, gráficas,
+   resumen por sucursal, pendientes con detalle, tiempo de atención, tendencia
+   vs. mes anterior, recurrencias por equipo y reincidencias. Todo reactivo a
+   los filtros (sucursal/estado/prioridad/técnico/tipo). */
 const ROLES_PANEL_GESTION = ['Administrador', 'Gerente de Operaciones', 'Gerente de Área'];
 function mostrarPanelGestion() { return !!(state.user && ROLES_PANEL_GESTION.indexOf(state.user.rol) > -1); }
+
+const ESTADOS_GV = ['Pendiente', 'Asignado', 'En proceso', 'Finalizado', 'Cancelado'];
+const ESTADOS_GV_COLORES = { 'Pendiente': '#f4a300', 'Asignado': '#5e35b1', 'En proceso': '#1565c0', 'Finalizado': '#2a9d8f', 'Cancelado': '#607d8b' };
+const PRIORIDADES_GV = ['Crítica', 'Alta', 'Media', 'Baja'];
+const PRIORIDADES_GV_COLORES = { 'Crítica': '#b71c1c', 'Alta': '#c62828', 'Media': '#e65100', 'Baja': '#2e7d32' };
+
+let gvFiltrosPoblados = false;
+function poblarFiltrosGV() {
+  if (gvFiltrosPoblados) return;
+  const sucSel = document.getElementById('gvFiltroSucursal');
+  if (sucSel) {
+    sucSel.innerHTML = '<option value="">Sucursal (Todas)</option>' +
+      state.cache.Sucursales.map(function (s) { return '<option value="' + sucursalKey(s) + '">' + sucursalLabel(s) + '</option>'; }).join('');
+  }
+  const tecSel = document.getElementById('gvFiltroTecnico');
+  if (tecSel) {
+    tecSel.innerHTML = '<option value="">Técnico (Todos)</option>' +
+      state.cache.Tecnicos.map(function (t) { return '<option value="' + t.id + '">' + t.nombre + '</option>'; }).join('');
+  }
+  gvFiltrosPoblados = true;
+}
+
+function leerFiltrosGV() {
+  function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+  return {
+    sucursal: val('gvFiltroSucursal'),
+    estado: val('gvFiltroEstado'),
+    prioridad: val('gvFiltroPrioridad'),
+    tecnico: val('gvFiltroTecnico'),
+    tipo: val('gvFiltroTipo')
+  };
+}
+
+function aplicarFiltrosGV(ordenes) {
+  const f = leerFiltrosGV();
+  return ordenes.filter(function (o) {
+    if (f.sucursal && o.sucursal_id !== f.sucursal) return false;
+    if (f.estado && o.estado !== f.estado) return false;
+    if (f.prioridad && o.prioridad !== f.prioridad) return false;
+    if (f.tecnico && o.tecnico_id !== f.tecnico) return false;
+    if (f.tipo && o.tipo !== f.tipo) return false;
+    return true;
+  });
+}
+
+function limpiarFiltrosGV() {
+  ['gvFiltroSucursal', 'gvFiltroEstado', 'gvFiltroPrioridad', 'gvFiltroTecnico', 'gvFiltroTipo'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderPanelGestion();
+}
 
 function renderPanelGestion() {
   const card = document.getElementById('panelGestionCard');
@@ -461,108 +518,354 @@ function renderPanelGestion() {
   if (!mostrarPanelGestion()) { card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
 
-  const ordenes = state.cache.Ordenes;
-  const solicitados = ordenes.length;
-  const terminados = ordenes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
-  const pendientes = ordenes.filter(function (o) { return o.estado !== 'Finalizado'; }).length;
+  poblarFiltrosGV();
+
+  const actualizadoEl = document.getElementById('gvActualizado');
+  if (actualizadoEl) actualizadoEl.textContent = 'Última actualización: ' + new Date().toLocaleString();
+
+  const ordenes = aplicarFiltrosGV(state.cache.Ordenes);
+
+  renderGvKpis(ordenes);
+  renderGvChartMensual(ordenes);
+  renderGvChartEstado(ordenes);
+  renderGvChartPrioridad(ordenes);
+  renderGvResumenSucursal(ordenes);
+  renderGvPendientesDetalle(ordenes);
+  renderGvTiempoSucursal(ordenes);
+  renderGvTendencia(ordenes);
+  renderGvRecurrentes(ordenes);
+  renderGvTopTecnicos(ordenes);
+  renderGvReincidencias(ordenes);
+}
+
+function diasAbiertos(o, hoy) {
+  if (!o.fecha) return 0;
+  const f = new Date(o.fecha);
+  if (isNaN(f)) return 0;
+  const fin = esOrdenAbierta(o) ? hoy : (o.fecha_cierre ? new Date(o.fecha_cierre) : hoy);
+  return Math.round((fin - f) / 86400000);
+}
+
+function tiempoPromedioDias(ordenes) {
+  const tiempos = ordenes
+    .filter(function (o) { return o.estado === 'Finalizado' && o.fecha && o.fecha_cierre; })
+    .map(function (o) { return (new Date(o.fecha_cierre) - new Date(o.fecha)) / 86400000; })
+    .filter(function (n) { return !isNaN(n) && n >= 0; });
+  return tiempos.length ? (tiempos.reduce(function (a, b) { return a + b; }, 0) / tiempos.length) : 0;
+}
+
+function renderGvKpis(ordenes) {
+  const requeridos = ordenes.length;
+  const finalizados = ordenes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
+  const enProceso = ordenes.filter(function (o) { return o.estado === 'En proceso'; }).length;
+  const pendientes = ordenes.filter(function (o) { return o.estado === 'Pendiente'; }).length;
+  const cumplimiento = requeridos ? (finalizados / requeridos) * 100 : 0;
+  const tiempoProm = tiempoPromedioDias(ordenes);
+  const criticos = ordenes.filter(function (o) { return o.prioridad === 'Crítica' && esOrdenAbierta(o); }).length;
+
+  document.getElementById('gvRequeridos').textContent = requeridos;
+  document.getElementById('gvFinalizados').textContent = finalizados;
+  document.getElementById('gvEnProceso').textContent = enProceso;
+  document.getElementById('gvPendientesKpi').textContent = pendientes;
+  document.getElementById('gvCumplimiento').textContent = cumplimiento.toFixed(1) + '%';
+  document.getElementById('gvTiempoProm').textContent = tiempoProm.toFixed(1);
+  document.getElementById('gvCriticos').textContent = criticos;
+}
+
+let chartGvMensualInstance = null;
+function renderGvChartMensual(ordenes) {
+  const ctx = document.getElementById('chartGvMensual');
+  if (!ctx || typeof Chart === 'undefined') return;
 
   const hoy = new Date();
-  const atrasadas = ordenes.filter(function (o) {
-    if (o.estado === 'Finalizado' || !o.fecha) return false;
-    const f = new Date(o.fecha);
-    return !isNaN(f) && (hoy - f) / 86400000 > 5;
+  const meses = [];
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    meses.push({ label: d.toLocaleDateString('es', { month: 'short' }), year: d.getFullYear(), month: d.getMonth() });
+  }
+  const requeridosPorMes = meses.map(function (m) {
+    return ordenes.filter(function (o) {
+      if (!o.fecha) return false;
+      const f = new Date(o.fecha);
+      return !isNaN(f) && f.getFullYear() === m.year && f.getMonth() === m.month;
+    }).length;
+  });
+  const finalizadosPorMes = meses.map(function (m) {
+    return ordenes.filter(function (o) {
+      if (o.estado !== 'Finalizado' || !o.fecha_cierre) return false;
+      const f = new Date(o.fecha_cierre);
+      return !isNaN(f) && f.getFullYear() === m.year && f.getMonth() === m.month;
+    }).length;
+  });
+  const cumplimientoPorMes = meses.map(function (m, i) {
+    return requeridosPorMes[i] ? Math.round((finalizadosPorMes[i] / requeridosPorMes[i]) * 100) : 0;
   });
 
-  document.getElementById('gkSolicitados').textContent = solicitados;
-  document.getElementById('gkTerminados').textContent = terminados;
-  document.getElementById('gkPendientes').textContent = pendientes;
-  document.getElementById('gkAtrasados').textContent = atrasadas.length;
+  if (chartGvMensualInstance) chartGvMensualInstance.destroy();
+  chartGvMensualInstance = new Chart(ctx, {
+    data: {
+      labels: meses.map(function (m) { return m.label; }),
+      datasets: [
+        { type: 'bar', label: 'Requeridos', data: requeridosPorMes, backgroundColor: '#14486b', order: 2 },
+        { type: 'bar', label: 'Finalizados', data: finalizadosPorMes, backgroundColor: '#2a9d8f', order: 2 },
+        { type: 'line', label: '% Cumplimiento', data: cumplimientoPorMes, borderColor: '#f4a300', backgroundColor: '#f4a300', yAxisID: 'y1', order: 1, tension: 0.3 }
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: { beginAtZero: true },
+        y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: function (v) { return v + '%'; } } }
+      }
+    }
+  });
+}
 
-  // Sucursales con más problemas (por cantidad total de órdenes)
+let chartGvEstadoInstance = null;
+function renderGvChartEstado(ordenes) {
+  const ctx = document.getElementById('chartGvEstado');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const counts = ESTADOS_GV.map(function (e) { return ordenes.filter(function (o) { return o.estado === e; }).length; });
+  if (chartGvEstadoInstance) chartGvEstadoInstance.destroy();
+  chartGvEstadoInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: ESTADOS_GV, datasets: [{ data: counts, backgroundColor: ESTADOS_GV.map(function (e) { return ESTADOS_GV_COLORES[e]; }) }] },
+    options: { plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+let chartGvPrioridadInstance = null;
+function renderGvChartPrioridad(ordenes) {
+  const ctx = document.getElementById('chartGvPrioridad');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const counts = PRIORIDADES_GV.map(function (p) { return ordenes.filter(function (o) { return o.prioridad === p; }).length; });
+  if (chartGvPrioridadInstance) chartGvPrioridadInstance.destroy();
+  chartGvPrioridadInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: PRIORIDADES_GV, datasets: [{ data: counts, backgroundColor: PRIORIDADES_GV.map(function (p) { return PRIORIDADES_GV_COLORES[p]; }) }] },
+    options: { plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function renderGvResumenSucursal(ordenes) {
+  const table = document.getElementById('table-GvResumenSucursal');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = '<tr><th>Sucursal</th><th>Requeridos</th><th>Finalizados</th><th>Pendientes</th><th>% Cumplimiento</th><th>Críticos pendientes</th></tr>';
+
+  const filas = state.cache.Sucursales.map(function (s) {
+    const key = sucursalKey(s);
+    const propias = key ? ordenes.filter(function (o) { return o.sucursal_id === key; }) : [];
+    const requeridos = propias.length;
+    const finalizados = propias.filter(function (o) { return o.estado === 'Finalizado'; }).length;
+    const pendientes = propias.filter(function (o) { return esOrdenAbierta(o); }).length;
+    const criticos = propias.filter(function (o) { return o.prioridad === 'Crítica' && esOrdenAbierta(o); }).length;
+    const cumplimiento = requeridos ? (finalizados / requeridos) * 100 : 0;
+    return { nombre: sucursalLabel(s), requeridos: requeridos, finalizados: finalizados, pendientes: pendientes, criticos: criticos, cumplimiento: cumplimiento };
+  }).filter(function (r) { return r.requeridos > 0; })
+    .sort(function (a, b) { return b.pendientes - a.pendientes || b.requeridos - a.requeridos; })
+    .slice(0, 15);
+
+  if (!filas.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted);">Sin órdenes registradas todavía.</td></tr>';
+  } else {
+    const totReq = ordenes.length;
+    const totFin = ordenes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
+    const totPend = ordenes.filter(function (o) { return esOrdenAbierta(o); }).length;
+    const totCrit = ordenes.filter(function (o) { return o.prioridad === 'Crítica' && esOrdenAbierta(o); }).length;
+    const totCump = totReq ? (totFin / totReq) * 100 : 0;
+
+    function barraColor(pct) { return pct >= 80 ? 'var(--success)' : (pct >= 50 ? 'var(--warning)' : 'var(--danger)'); }
+    function fila(r, esTotal) {
+      return '<tr' + (esTotal ? ' style="font-weight:700;background:#f9fafb;"' : '') + '>' +
+        '<td>' + r.nombre + '</td><td>' + r.requeridos + '</td><td>' + r.finalizados + '</td><td>' + r.pendientes + '</td>' +
+        '<td><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:' + r.cumplimiento.toFixed(0) + '%;background:' + barraColor(r.cumplimiento) + ';"></div></div><span style="font-size:12px;">' + r.cumplimiento.toFixed(1) + '%</span></div></td>' +
+        '<td>' + r.criticos + '</td></tr>';
+    }
+    tbody.innerHTML = filas.map(function (r) { return fila(r, false); }).join('') +
+      fila({ nombre: 'TOTAL', requeridos: totReq, finalizados: totFin, pendientes: totPend, criticos: totCrit, cumplimiento: totCump }, true);
+  }
+}
+
+function renderGvPendientesDetalle(ordenes) {
+  const table = document.getElementById('table-GvPendientesDetalle');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = '<tr><th>Fecha solicitud</th><th>Sucursal</th><th>Equipo/Área</th><th>Problema</th><th>Prioridad</th><th>Días pendiente</th><th>Estado</th></tr>';
+
+  const hoy = new Date();
+  const filas = ordenes.filter(function (o) {
+    if (!esOrdenAbierta(o) || !o.fecha) return false;
+    return diasAbiertos(o, hoy) > 2;
+  }).sort(function (a, b) { return diasAbiertos(b, hoy) - diasAbiertos(a, hoy); });
+
+  if (!filas.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-muted);">No hay mantenimientos con más de 2 días pendientes.</td></tr>';
+  } else {
+    tbody.innerHTML = filas.map(function (o) {
+      return '<tr><td>' + new Date(o.fecha).toLocaleDateString() + '</td><td>' + sucursalNombre(o.sucursal_id) + '</td>' +
+        '<td>' + (o.equipo || '-') + '</td><td>' + (o.descripcion || '') + '</td>' +
+        '<td><span class="' + prioridadClass(o.prioridad) + '">' + (o.prioridad || '') + '</span></td>' +
+        '<td class="tiempo-critico">' + diasAbiertos(o, hoy) + '</td>' +
+        '<td><span class="badge badge-' + String(o.estado || '').toLowerCase().replace(/\s+/g, '') + '">' + (o.estado || '') + '</span></td></tr>';
+    }).join('');
+  }
+}
+
+let chartGvTiempoSucursalInstance = null;
+function renderGvTiempoSucursal(ordenes) {
+  const ctx = document.getElementById('chartGvTiempoSucursal');
+  const callout = document.getElementById('gvPromedioGeneral');
+  if (callout) callout.textContent = 'Promedio general: ' + tiempoPromedioDias(ordenes).toFixed(1) + ' días';
+  if (!ctx || typeof Chart === 'undefined') return;
+
   const porSucursal = {};
-  ordenes.forEach(function (o) { if (o.sucursal_id) porSucursal[o.sucursal_id] = (porSucursal[o.sucursal_id] || 0) + 1; });
-  const topSucursales = Object.keys(porSucursal)
-    .map(function (id) { return { id: id, count: porSucursal[id] }; })
-    .sort(function (a, b) { return b.count - a.count; })
-    .slice(0, 5);
-  document.getElementById('gkTopSucursales').innerHTML = topSucursales.length
-    ? topSucursales.map(function (x) { return '<li>' + sucursalNombre(x.id) + ' — ' + x.count + ' orden(es)</li>'; }).join('')
-    : '<li style="color:var(--text-muted);">Sin datos todavía.</li>';
+  ordenes.forEach(function (o) {
+    if (o.estado !== 'Finalizado' || !o.fecha || !o.fecha_cierre || !o.sucursal_id) return;
+    const dias = (new Date(o.fecha_cierre) - new Date(o.fecha)) / 86400000;
+    if (isNaN(dias) || dias < 0) return;
+    if (!porSucursal[o.sucursal_id]) porSucursal[o.sucursal_id] = { total: 0, count: 0 };
+    porSucursal[o.sucursal_id].total += dias;
+    porSucursal[o.sucursal_id].count++;
+  });
+  const filas = Object.keys(porSucursal).map(function (id) {
+    return { nombre: sucursalNombre(id), prom: porSucursal[id].total / porSucursal[id].count };
+  }).sort(function (a, b) { return b.prom - a.prom; }).slice(0, 12);
 
-  // Carga por técnico (solo órdenes abiertas asignadas)
+  if (chartGvTiempoSucursalInstance) chartGvTiempoSucursalInstance.destroy();
+  chartGvTiempoSucursalInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: filas.map(function (f) { return f.nombre; }), datasets: [{ label: 'Días promedio', data: filas.map(function (f) { return f.prom.toFixed(1); }), backgroundColor: '#2a9d8f' }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+  });
+}
+
+function mesRango(offset) {
+  const hoy = new Date();
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - offset, 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() - offset + 1, 1);
+  return { inicio: inicio, fin: fin };
+}
+
+function metricasDelMes(ordenes, rango) {
+  const requeridos = ordenes.filter(function (o) {
+    if (!o.fecha) return false;
+    const f = new Date(o.fecha);
+    return !isNaN(f) && f >= rango.inicio && f < rango.fin;
+  }).length;
+  const finalizados = ordenes.filter(function (o) {
+    if (o.estado !== 'Finalizado' || !o.fecha_cierre) return false;
+    const f = new Date(o.fecha_cierre);
+    return !isNaN(f) && f >= rango.inicio && f < rango.fin;
+  }).length;
+  const pendientes = ordenes.filter(function (o) {
+    if (!o.fecha || !esOrdenAbierta(o)) return false;
+    const f = new Date(o.fecha);
+    return !isNaN(f) && f >= rango.inicio && f < rango.fin;
+  }).length;
+  const cumplimiento = requeridos ? (finalizados / requeridos) * 100 : 0;
+  return { requeridos: requeridos, finalizados: finalizados, pendientes: pendientes, cumplimiento: cumplimiento };
+}
+
+function renderGvTendencia(ordenes) {
+  const actual = metricasDelMes(ordenes, mesRango(0));
+  const anterior = metricasDelMes(ordenes, mesRango(1));
+
+  function pintar(prefijo, valorActual, valorAnterior, formato) {
+    const vEl = document.getElementById(prefijo + 'V');
+    const cEl = document.getElementById(prefijo + 'C');
+    const sEl = document.getElementById(prefijo + 'S');
+    if (!vEl) return;
+    vEl.textContent = formato ? valorActual.toFixed(1) + '%' : valorActual;
+    if (!valorAnterior) {
+      cEl.innerHTML = '<span class="trend-sub">Sin datos del mes anterior</span>';
+      sEl.textContent = '';
+      return;
+    }
+    const cambio = ((valorActual - valorAnterior) / valorAnterior) * 100;
+    const subeEsBueno = prefijo !== 'gvTrendPendientes';
+    const subio = cambio > 0;
+    const esBueno = subio === subeEsBueno;
+    const flecha = subio ? '▲' : (cambio < 0 ? '▼' : '➡️');
+    cEl.innerHTML = '<span class="' + (cambio === 0 ? 'trend-sub' : (esBueno ? 'trend-change-up' : 'trend-change-down')) + '">' + flecha + ' ' + Math.abs(cambio).toFixed(1) + '%</span>';
+    sEl.textContent = 'Mes anterior: ' + (formato ? valorAnterior.toFixed(1) + '%' : valorAnterior);
+  }
+
+  pintar('gvTrendRequeridos', actual.requeridos, anterior.requeridos, false);
+  pintar('gvTrendFinalizados', actual.finalizados, anterior.finalizados, false);
+  pintar('gvTrendPendientes', actual.pendientes, anterior.pendientes, false);
+  pintar('gvTrendCumplimiento', actual.cumplimiento, anterior.cumplimiento, true);
+}
+
+let chartGvRecurrentesInstance = null;
+function renderGvRecurrentes(ordenes) {
+  const ctx = document.getElementById('chartGvRecurrentes');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const porEquipo = {};
+  ordenes.forEach(function (o) {
+    const eq = String(o.equipo || '').trim();
+    if (!eq) return;
+    porEquipo[eq] = (porEquipo[eq] || 0) + 1;
+  });
+  const top = Object.keys(porEquipo).map(function (eq) { return { eq: eq, count: porEquipo[eq] }; })
+    .sort(function (a, b) { return b.count - a.count; }).slice(0, 5);
+
+  if (chartGvRecurrentesInstance) chartGvRecurrentesInstance.destroy();
+  chartGvRecurrentesInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: top.map(function (t) { return t.eq; }), datasets: [{ label: 'Incidencias', data: top.map(function (t) { return t.count; }), backgroundColor: '#1e6091' }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+  });
+}
+
+function renderGvTopTecnicos(ordenes) {
+  const el = document.getElementById('gkTopTecnicos');
+  if (!el) return;
   const porTecnicoAbiertas = {};
   ordenes.forEach(function (o) {
-    if (o.tecnico_id && o.estado !== 'Finalizado') porTecnicoAbiertas[o.tecnico_id] = (porTecnicoAbiertas[o.tecnico_id] || 0) + 1;
+    if (o.tecnico_id && esOrdenAbierta(o)) porTecnicoAbiertas[o.tecnico_id] = (porTecnicoAbiertas[o.tecnico_id] || 0) + 1;
   });
   const topTecnicos = Object.keys(porTecnicoAbiertas)
     .map(function (id) { return { id: id, count: porTecnicoAbiertas[id] }; })
     .sort(function (a, b) { return b.count - a.count; })
     .slice(0, 5);
-  document.getElementById('gkTopTecnicos').innerHTML = topTecnicos.length
+  el.innerHTML = topTecnicos.length
     ? topTecnicos.map(function (x) { return '<li>' + tecnicoNombre(x.id) + ' — ' + x.count + ' orden(es) abiertas</li>'; }).join('')
     : '<li style="color:var(--text-muted);">Sin datos todavía.</li>';
-
-  // Tabla de órdenes atrasadas
-  const table = document.getElementById('table-Atrasadas');
-  const thead = table.querySelector('thead');
-  const tbody = table.querySelector('tbody');
-  thead.innerHTML = '<tr><th>Sucursal</th><th>Descripción</th><th>Técnico</th><th>Días abierta</th><th>Prioridad</th></tr>';
-  if (!atrasadas.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted);">No hay órdenes atrasadas.</td></tr>';
-  } else {
-    tbody.innerHTML = atrasadas
-      .slice()
-      .sort(function (a, b) { return new Date(a.fecha) - new Date(b.fecha); })
-      .map(function (o) {
-        const dias = Math.round((hoy - new Date(o.fecha)) / 86400000);
-        return '<tr><td>' + sucursalNombre(o.sucursal_id) + '</td><td>' + (o.descripcion || '') + '</td><td>' +
-          tecnicoNombre(o.tecnico_id) + '</td><td class="tiempo-critico">' + dias + ' día(s)</td><td>' + (o.prioridad || '') + '</td></tr>';
-      }).join('');
-  }
-
-  renderTendenciaMensual(ordenes);
 }
 
-function renderTendenciaMensual(ordenes) {
-  const el = document.getElementById('gkTendencia');
-  if (!el) return;
-  const hoy = new Date();
-  const inicioMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const finMesActual = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-  const inicioMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+function renderGvReincidencias(ordenes) {
+  const table = document.getElementById('table-GvReincidencias');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = '<tr><th>Sucursal</th><th>Equipo</th><th>Incidencias</th><th>Última reparación</th></tr>';
 
-  function terminadasEnRango(desde, hasta) {
-    return ordenes.filter(function (o) {
-      if (o.estado !== 'Finalizado' || !o.fecha_cierre) return false;
-      const fc = new Date(o.fecha_cierre);
-      return !isNaN(fc) && fc >= desde && fc < hasta;
-    }).length;
-  }
+  const grupos = {};
+  ordenes.forEach(function (o) {
+    const eq = String(o.equipo || '').trim();
+    if (!eq || !o.sucursal_id) return;
+    const clave = o.sucursal_id + '||' + eq;
+    if (!grupos[clave]) grupos[clave] = { sucursal_id: o.sucursal_id, equipo: eq, count: 0, ultima: null };
+    grupos[clave].count++;
+    const f = o.fecha_cierre ? new Date(o.fecha_cierre) : (o.fecha ? new Date(o.fecha) : null);
+    if (f && !isNaN(f) && (!grupos[clave].ultima || f > grupos[clave].ultima)) grupos[clave].ultima = f;
+  });
 
-  const terminadasMesActual = terminadasEnRango(inicioMesActual, finMesActual);
-  const terminadasMesAnterior = terminadasEnRango(inicioMesAnterior, inicioMesActual);
+  const top = Object.keys(grupos).map(function (k) { return grupos[k]; })
+    .filter(function (g) { return g.count >= 2; })
+    .sort(function (a, b) { return b.count - a.count; })
+    .slice(0, 5);
 
-  if (!terminadasMesActual && !terminadasMesAnterior) {
-    el.textContent = 'Todavía no hay suficiente historial de cierres para comparar con el mes anterior.';
-    el.style.color = 'var(--text-muted)';
-    return;
-  }
-  if (!terminadasMesAnterior) {
-    el.textContent = '📈 Este mes se han cerrado ' + terminadasMesActual + ' orden(es) (el mes anterior no se cerró ninguna).';
-    el.style.color = 'var(--success)';
-    return;
-  }
-
-  const cambio = Math.round(((terminadasMesActual - terminadasMesAnterior) / terminadasMesAnterior) * 100);
-  if (cambio > 0) {
-    el.textContent = '📈 Mejorando: ' + terminadasMesActual + ' órdenes cerradas este mes vs ' + terminadasMesAnterior + ' el mes anterior (+' + cambio + '%).';
-    el.style.color = 'var(--success)';
-  } else if (cambio < 0) {
-    el.textContent = '📉 Empeorando: ' + terminadasMesActual + ' órdenes cerradas este mes vs ' + terminadasMesAnterior + ' el mes anterior (' + cambio + '%).';
-    el.style.color = 'var(--danger)';
+  if (!top.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-muted);">Sin reincidencias registradas todavía.</td></tr>';
   } else {
-    el.textContent = '➡️ Igual que el mes anterior: ' + terminadasMesActual + ' órdenes cerradas.';
-    el.style.color = 'var(--text-muted)';
+    tbody.innerHTML = top.map(function (g) {
+      return '<tr><td>' + sucursalNombre(g.sucursal_id) + '</td><td>' + g.equipo + '</td><td>' + g.count + '</td>' +
+        '<td>' + (g.ultima ? g.ultima.toLocaleDateString() : '-') + '</td></tr>';
+    }).join('');
   }
 }
 
@@ -588,7 +891,7 @@ function renderSolicitudesPanel() {
     if (o.estado === 'Pendiente') g.pendiente++;
     else if (o.estado === 'En proceso') g.enProceso++;
     else if (o.estado === 'Finalizado') g.finalizado++;
-    if (o.prioridad === 'Alta' && o.estado !== 'Finalizado') g.urgentesAbiertas++;
+    if (o.prioridad === 'Alta' && esOrdenAbierta(o)) g.urgentesAbiertas++;
     const f = o.fecha ? new Date(o.fecha) : null;
     if (f && !isNaN(f) && (!g.ultima || f > g.ultima)) g.ultima = f;
   });
@@ -638,7 +941,7 @@ function renderInsights(solicitudes, bySuc) {
 
     const hoy = new Date();
     const pendientesViejas = solicitudes.filter(function (o) {
-      if (o.estado === 'Finalizado' || !o.fecha) return false;
+      if (!esOrdenAbierta(o) || !o.fecha) return false;
       const f = new Date(o.fecha);
       if (isNaN(f)) return false;
       return (hoy - f) / 86400000 > 7;
@@ -647,7 +950,7 @@ function renderInsights(solicitudes, bySuc) {
       items.push(pendientesViejas.length + ' solicitud(es) llevan más de 7 días abiertas sin cerrarse. Riesgo de acumulación de mantenimiento correctivo.');
     }
 
-    const urgentesAbiertas = solicitudes.filter(function (o) { return o.prioridad === 'Alta' && o.estado !== 'Finalizado'; });
+    const urgentesAbiertas = solicitudes.filter(function (o) { return o.prioridad === 'Alta' && esOrdenAbierta(o); });
     if (urgentesAbiertas.length) {
       items.push(urgentesAbiertas.length + ' solicitud(es) marcadas como urgentes siguen abiertas.');
     }
@@ -716,9 +1019,9 @@ function renderSucursalesGrid() {
   const ordenes = state.cache.Ordenes;
   state.cache.Sucursales.forEach(function (s) {
     const key = sucursalKey(s);
-    const abiertas = key ? ordenes.filter(function (o) { return o.sucursal_id === key && o.estado !== 'Finalizado'; }) : [];
+    const abiertas = key ? ordenes.filter(function (o) { return o.sucursal_id === key && esOrdenAbierta(o); }) : [];
     let cls = 'sucursal-badge';
-    if (abiertas.some(function (o) { return o.prioridad === 'Alta'; })) cls += ' urgente';
+    if (abiertas.some(function (o) { return o.prioridad === 'Alta' || o.prioridad === 'Crítica'; })) cls += ' urgente';
     else if (abiertas.some(function (o) { return o.estado === 'Pendiente'; })) cls += ' pendiente';
     else if (abiertas.some(function (o) { return o.estado === 'En proceso'; })) cls += ' enproceso';
     const badge = document.createElement('div');
@@ -861,14 +1164,17 @@ function tiempoEsperaInfo(o) {
   if (!o.fecha) return { texto: '-', clase: '' };
   const inicio = new Date(o.fecha);
   if (isNaN(inicio)) return { texto: '-', clase: '' };
-  const finalizado = o.estado === 'Finalizado';
+  const cerrada = !esOrdenAbierta(o);
   let fin = new Date();
-  if (finalizado && o.fecha_cierre) {
+  if (cerrada && o.fecha_cierre) {
     const fc = new Date(o.fecha_cierre);
     if (!isNaN(fc)) fin = fc;
   }
   const dias = Math.max(0, Math.round((fin - inicio) / 86400000));
-  if (finalizado) {
+  if (o.estado === 'Cancelado') {
+    return { texto: dias + ' día(s) (cancelado)', clase: '' };
+  }
+  if (o.estado === 'Finalizado') {
     return { texto: dias + ' día(s) (resuelto)', clase: 'tiempo-ok' };
   }
   let clase = 'tiempo-ok';
@@ -879,8 +1185,19 @@ function tiempoEsperaInfo(o) {
 
 function ordenRowClass(o) {
   if (o.estado === 'Finalizado') return 'orden-finalizado';
+  if (o.estado === 'Cancelado') return 'orden-cancelado';
   if (o.estado === 'En proceso') return 'orden-enproceso';
+  if (o.estado === 'Asignado') return 'orden-asignado';
   return 'orden-pendiente';
+}
+
+function prioridadClass(p) {
+  const key = stripAccents(String(p || '')).replace(/[^a-z]/g, '');
+  if (key === 'critica') return 'prioridad-critica';
+  if (key === 'alta') return 'prioridad-alta';
+  if (key === 'media') return 'prioridad-media';
+  if (key === 'baja') return 'prioridad-baja';
+  return '';
 }
 
 function renderOrdenesTable() {
@@ -911,7 +1228,7 @@ function renderOrdenesTable() {
       '<td>' + (o.descripcion || '') + '</td>' +
       '<td>' + tecnicoNombre(o.tecnico_id) + '</td>' +
       '<td><span class="badge badge-' + String(o.estado || '').toLowerCase().replace(/\s+/g, '') + '">' + (o.estado || '') + '</span></td>' +
-      '<td>' + (o.prioridad || '') + '</td>' +
+      '<td><span class="' + prioridadClass(o.prioridad) + '">' + (o.prioridad || '') + '</span></td>' +
       '<td>' + (o.costo ? '$' + Number(o.costo).toFixed(2) : '') + '</td>' +
       '<td class="' + tiempo.clase + '">' + tiempo.texto + '</td>';
 
@@ -944,7 +1261,7 @@ function renderOrdenesTable() {
         extBtn.addEventListener('click', function () { marcarOrden(o.id, 'tipo', 'Extraordinario'); });
         td.appendChild(extBtn);
       }
-      if (o.estado !== 'Finalizado') {
+      if (esOrdenAbierta(o)) {
         const closeBtn = document.createElement('button');
         closeBtn.textContent = '✅ Cerrado';
         closeBtn.addEventListener('click', function () { abrirCierreModal(o.id); });
@@ -1051,6 +1368,8 @@ function openOrdenModal(existing) {
   document.getElementById('ordenCosto').value = (existing && existing.costo) || '';
   document.getElementById('ordenDescripcion').value = (existing && existing.descripcion) || '';
   document.getElementById('ordenObservaciones').value = (existing && existing.observaciones) || '';
+  const ordenEquipoEl = document.getElementById('ordenEquipo');
+  if (ordenEquipoEl) ordenEquipoEl.value = (existing && existing.equipo) || '';
   if (existing) {
     sucSelect.value = existing.sucursal_id || '';
     vehSelect.value = existing.vehiculo_id || '';
@@ -1093,6 +1412,7 @@ function saveOrden() {
     costo: document.getElementById('ordenCosto').value,
     descripcion: document.getElementById('ordenDescripcion').value,
     observaciones: document.getElementById('ordenObservaciones').value,
+    equipo: document.getElementById('ordenEquipo') ? document.getElementById('ordenEquipo').value : '',
     firma: compressedSignatureDataUrl(canvas)
   };
   if (state.editing && state.editing.id) {
@@ -1222,7 +1542,7 @@ function renderSolicitudesTable(rows) {
       '<td><span class="badge badge-' + String(o.estado || '').toLowerCase().replace(/\s+/g, '') + '">' + (o.estado || '') + '</span></td>';
     const td = document.createElement('td');
     td.className = 'row-actions';
-    if (o.estado !== 'Finalizado') {
+    if (esOrdenAbierta(o)) {
       const closeBtn = document.createElement('button');
       closeBtn.textContent = '✅ Cerrado';
       closeBtn.addEventListener('click', function () { abrirCierreModal(o.id); });
@@ -1264,6 +1584,7 @@ function enviarSolicitud() {
     costo: '',
     firma: '',
     observaciones: '',
+    equipo: document.getElementById('solEquipo') ? document.getElementById('solEquipo').value : '',
     // Marca el origen para poder distinguir en el dashboard las solicitudes
     // enviadas por un Gerente de Sucursal de las órdenes creadas directamente
     // por Administrador/Supervisor. Si tu hoja Ordenes no tiene columna
@@ -1318,6 +1639,13 @@ function wireGlobalUI() {
   document.getElementById('cierreCancel').addEventListener('click', cerrarCierreModal);
   document.getElementById('cierreConfirmar').addEventListener('click', confirmarCierre);
   document.getElementById('clearCierreSignature').addEventListener('click', clearCierreSignaturePad);
+
+  ['gvFiltroSucursal', 'gvFiltroEstado', 'gvFiltroPrioridad', 'gvFiltroTecnico', 'gvFiltroTipo'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', renderPanelGestion);
+  });
+  const gvLimpiar = document.getElementById('gvLimpiarFiltros');
+  if (gvLimpiar) gvLimpiar.addEventListener('click', limpiarFiltrosGV);
 
   setupSignaturePad();
   setupSignaturePad('cierreSignaturePad');
