@@ -94,9 +94,23 @@ button { cursor: pointer; font-family: inherit; }
 .kpi-value { font-size: 28px; font-weight: 700; color: var(--primary-dark); }
 .kpi-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
 .chart-card { background: var(--card-bg); border-radius: var(--radius); padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .chart-card h3 { margin-top: 0; font-size: 15px; }
 .sucursales-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; margin-top: 8px; }
+
+/* Panel de gestión: filtros, barra de progreso, tendencia */
+.filtros-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.filtros-bar select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; min-width: 150px; background: #fff; }
+.progress-bar-wrap { background: #eef0f2; border-radius: 6px; height: 8px; width: 100%; overflow: hidden; min-width: 70px; }
+.progress-bar-fill { height: 100%; border-radius: 6px; }
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.trend-card { background: var(--bg); border-radius: 8px; padding: 12px; text-align: center; border: 1px solid var(--border); }
+.trend-value { font-size: 20px; font-weight: 700; color: var(--primary-dark); }
+.trend-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.trend-change-up { color: var(--success); font-weight: 700; font-size: 13px; }
+.trend-change-down { color: var(--danger); font-weight: 700; font-size: 13px; }
+.trend-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .sucursal-badge {
   padding: 8px 4px; border-radius: 8px; text-align: center; font-size: 11px; font-weight: 600;
   background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9;
@@ -114,17 +128,29 @@ th { background: #f9fafb; font-weight: 600; color: var(--text-muted); text-trans
 tr:hover td { background: #f9fbfd; }
 .badge { padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .badge-pendiente { background: #fff3e0; color: #e65100; }
+.badge-asignado { background: #ede7f6; color: #5e35b1; }
 .badge-enproceso { background: #e3f2fd; color: #1565c0; }
 .badge-finalizado { background: #e8f5e9; color: #2e7d32; }
+.badge-cancelado { background: #eceff1; color: #607d8b; }
 .row-actions button { border: none; background: none; font-size: 15px; margin-right: 6px; }
+
+/* Prioridad de una orden */
+.prioridad-baja { color: #2e7d32; font-weight: 600; }
+.prioridad-media { color: #e65100; font-weight: 600; }
+.prioridad-alta { color: #c62828; font-weight: 600; }
+.prioridad-critica { color: #ffffff; background: #b71c1c; padding: 2px 8px; border-radius: 20px; font-weight: 700; font-size: 11px; }
 
 /* Color de fila según el proceso de la orden */
 tr.orden-pendiente td { background: #fff8ec; }
+tr.orden-asignado td { background: #f5f1fc; }
 tr.orden-enproceso td { background: #eef6fc; }
 tr.orden-finalizado td { background: #eefaf1; }
+tr.orden-cancelado td { background: #f4f5f6; color: var(--text-muted); }
 tr.orden-pendiente:hover td { background: #fdf0d8; }
+tr.orden-asignado:hover td { background: #eae2f9; }
 tr.orden-enproceso:hover td { background: #e0eefa; }
 tr.orden-finalizado:hover td { background: #e2f5e8; }
+tr.orden-cancelado:hover td { background: #ebedee; }
 
 /* Tiempo de espera de una orden */
 .tiempo-ok { color: var(--success); font-weight: 600; }
