@@ -84,28 +84,96 @@
         </div>
 
         <div class="chart-card hidden" id="panelGestionCard">
-          <h3>Panel de gestión</h3>
-          <div class="kpi-grid">
-            <div class="kpi-card"><div class="kpi-value" id="gkSolicitados">0</div><div class="kpi-label">Mantenimientos solicitados</div></div>
-            <div class="kpi-card"><div class="kpi-value" id="gkTerminados">0</div><div class="kpi-label">Terminados</div></div>
-            <div class="kpi-card"><div class="kpi-value" id="gkPendientes">0</div><div class="kpi-label">Pendientes</div></div>
-            <div class="kpi-card"><div class="kpi-value" id="gkAtrasados">0</div><div class="kpi-label">Atrasados (+5 días)</div></div>
+          <h3>🔧 Dashboard de mantenimiento — Vista gerencial</h3>
+          <p style="color:var(--text-muted);font-size:12px;margin-top:-6px;" id="gvActualizado"></p>
+
+          <div class="filtros-bar">
+            <select id="gvFiltroSucursal" class="filter-select"><option value="">Sucursal (Todas)</option></select>
+            <select id="gvFiltroEstado" class="filter-select">
+              <option value="">Estado (Todos)</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Asignado">Asignado</option>
+              <option value="En proceso">En proceso</option>
+              <option value="Finalizado">Finalizado</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+            <select id="gvFiltroPrioridad" class="filter-select">
+              <option value="">Prioridad (Todas)</option>
+              <option value="Crítica">Crítica</option>
+              <option value="Alta">Alta</option>
+              <option value="Media">Media</option>
+              <option value="Baja">Baja</option>
+            </select>
+            <select id="gvFiltroTecnico" class="filter-select"><option value="">Técnico (Todos)</option></select>
+            <select id="gvFiltroTipo" class="filter-select">
+              <option value="">Tipo (Todos)</option>
+              <option value="Preventivo">Preventivo</option>
+              <option value="Correctivo">Correctivo</option>
+              <option value="Extraordinario">Extraordinario</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" id="gvLimpiarFiltros">Limpiar filtros</button>
           </div>
-          <p id="gkTendencia" style="font-size:13px;margin:10px 0 16px;"></p>
-          <div class="chart-grid">
-            <div>
-              <h4 style="margin:0 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Sucursales con más problemas</h4>
-              <ol id="gkTopSucursales" style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;"></ol>
+
+          <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-value" id="gvRequeridos">0</div><div class="kpi-label">Mantenimientos requeridos</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gvFinalizados">0</div><div class="kpi-label">✅ Finalizados</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gvEnProceso">0</div><div class="kpi-label">⚙️ En proceso</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gvPendientesKpi">0</div><div class="kpi-label">⏰ Pendientes</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gvCumplimiento">0%</div><div class="kpi-label">🎯 % Cumplimiento</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gvTiempoProm">0</div><div class="kpi-label">⏱️ Días prom. de atención</div></div>
+            <div class="kpi-card"><div class="kpi-value" id="gvCriticos">0</div><div class="kpi-label">⚠️ Críticos pendientes</div></div>
+          </div>
+
+          <div class="chart-grid-3">
+            <div class="chart-card"><h3>Requeridos vs Finalizados</h3><canvas id="chartGvMensual"></canvas></div>
+            <div class="chart-card"><h3>Distribución por estado</h3><canvas id="chartGvEstado"></canvas></div>
+            <div class="chart-card"><h3>Por prioridad</h3><canvas id="chartGvPrioridad"></canvas></div>
+          </div>
+
+          <h4 style="margin:16px 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Resumen por sucursal</h4>
+          <div class="table-wrap">
+            <table id="table-GvResumenSucursal"><thead></thead><tbody></tbody></table>
+          </div>
+
+          <h4 style="margin:16px 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Mantenimientos pendientes (detalle)</h4>
+          <div class="table-wrap">
+            <table id="table-GvPendientesDetalle"><thead></thead><tbody></tbody></table>
+          </div>
+          <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">Mostrando los mantenimientos con más de 2 días pendientes.</p>
+
+          <div class="chart-grid" style="margin-top:16px;">
+            <div class="chart-card">
+              <h3>Tiempo promedio de atención (días)</h3>
+              <canvas id="chartGvTiempoSucursal"></canvas>
+              <p id="gvPromedioGeneral" style="font-size:12px;color:var(--text-muted);margin:8px 0 0;"></p>
             </div>
             <div>
-              <h4 style="margin:0 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Carga por técnico (órdenes abiertas)</h4>
+              <h4 style="margin:0 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Tendencia vs. mes anterior</h4>
+              <div class="trend-grid">
+                <div class="trend-card"><div class="trend-value" id="gvTrendRequeridosV">0</div><div class="trend-label">Requeridos</div><div id="gvTrendRequeridosC"></div><div class="trend-sub" id="gvTrendRequeridosS"></div></div>
+                <div class="trend-card"><div class="trend-value" id="gvTrendFinalizadosV">0</div><div class="trend-label">Finalizados</div><div id="gvTrendFinalizadosC"></div><div class="trend-sub" id="gvTrendFinalizadosS"></div></div>
+                <div class="trend-card"><div class="trend-value" id="gvTrendPendientesV">0</div><div class="trend-label">Pendientes</div><div id="gvTrendPendientesC"></div><div class="trend-sub" id="gvTrendPendientesS"></div></div>
+                <div class="trend-card"><div class="trend-value" id="gvTrendCumplimientoV">0%</div><div class="trend-label">% Cumplimiento</div><div id="gvTrendCumplimientoC"></div><div class="trend-sub" id="gvTrendCumplimientoS"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-grid" style="margin-top:16px;">
+            <div class="chart-card">
+              <h3>Mantenimientos recurrentes (top 5 equipos/áreas)</h3>
+              <canvas id="chartGvRecurrentes"></canvas>
+            </div>
+            <div class="chart-card">
+              <h3>Carga por técnico (órdenes abiertas)</h3>
               <ol id="gkTopTecnicos" style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;"></ol>
             </div>
           </div>
-          <h4 style="margin:16px 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Órdenes atrasadas</h4>
+
+          <h4 style="margin:16px 0 8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Reincidencias (top 5 equipos)</h4>
           <div class="table-wrap">
-            <table id="table-Atrasadas"><thead></thead><tbody></tbody></table>
+            <table id="table-GvReincidencias"><thead></thead><tbody></tbody></table>
           </div>
+          <p style="color:var(--text-muted);font-size:11px;margin:8px 0 0;">Los datos se actualizan automáticamente según el registro de solicitudes en el sistema.</p>
         </div>
 
         <div class="chart-card">
@@ -157,8 +225,10 @@
           <select id="filtroEstado" class="filter-select">
             <option value="">Todos los estados</option>
             <option value="Pendiente">Pendiente</option>
+            <option value="Asignado">Asignado</option>
             <option value="En proceso">En proceso</option>
             <option value="Finalizado">Finalizado</option>
+            <option value="Cancelado">Cancelado</option>
           </select>
         </div>
         <div class="table-wrap"><table id="table-Ordenes"><thead></thead><tbody></tbody></table></div>
@@ -197,7 +267,10 @@
             <option value="Baja">Baja</option>
             <option value="Media" selected>Media</option>
             <option value="Alta">Alta</option>
+            <option value="Crítica">Crítica</option>
           </select>
+          <label>Equipo/Área (opcional)</label>
+          <input type="text" id="solEquipo" placeholder="Ej: Aire acondicionado, Refrigeradora, Plomería...">
           <label>Describe la necesidad</label>
           <textarea id="solDescripcion" rows="4" placeholder="Ej: El aire acondicionado no enfría, hace ruido raro..."></textarea>
           <button class="btn btn-primary" id="btnEnviarSolicitud" style="margin-top:12px;">Enviar solicitud</button>
@@ -263,14 +336,17 @@
             <option value="Baja">Baja</option>
             <option value="Media" selected>Media</option>
             <option value="Alta">Alta</option>
+            <option value="Crítica">Crítica</option>
           </select>
         </div>
         <div>
           <label>Estado</label>
           <select id="ordenEstado">
             <option value="Pendiente">Pendiente</option>
+            <option value="Asignado">Asignado</option>
             <option value="En proceso">En proceso</option>
             <option value="Finalizado">Finalizado</option>
+            <option value="Cancelado">Cancelado</option>
           </select>
         </div>
         <div>
@@ -280,6 +356,10 @@
         <div>
           <label>Costo (USD)</label>
           <input type="number" id="ordenCosto" step="0.01" placeholder="0.00">
+        </div>
+        <div>
+          <label>Equipo/Área (opcional)</label>
+          <input type="text" id="ordenEquipo" placeholder="Ej: Aire acondicionado, Refrigeradora...">
         </div>
       </div>
       <label>Descripción de la falla / trabajo</label>
