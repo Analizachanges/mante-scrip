@@ -52,16 +52,17 @@ function isAreaManager() { return !!(state.user && state.user.rol === 'Gerente d
 function isFullAccess() { return !!(state.user && FULL_ACCESS_ROLES.indexOf(state.user.rol) > -1); }
 function isTecnico() { return !!(state.user && state.user.rol === 'Técnico'); }
 function isOperaciones() { return !!(state.user && state.user.rol === 'Gerente de Operaciones'); }
+function isSupervisor() { return !!(state.user && state.user.rol === 'Supervisor'); }
 
 /* ===================== MENÚ LATERAL ===================== */
 const MENU = [
-  { id: 'dashboard', label: 'Dashboard', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Gerente de Área', 'Consulta'] },
+  { id: 'dashboard', label: 'Dashboard', roles: ['Administrador', 'Gerente de Operaciones', 'Gerente de Área', 'Consulta'] },
   { id: 'ordenes', label: 'Órdenes de trabajo', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Técnico', 'Consulta', 'Gerente de Área'] },
-  { id: 'sucursales', label: 'Sucursales', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Gerente de Área', 'Consulta'] },
-  { id: 'tecnicos', label: 'Técnicos', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor'] },
-  { id: 'vehiculos', label: 'Vehículos', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Consulta'] },
-  { id: 'inventario', label: 'Inventario', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor'] },
-  { id: 'preventivo', label: 'Mantenimiento preventivo', roles: ['Administrador', 'Gerente de Operaciones', 'Supervisor', 'Técnico'] },
+  { id: 'sucursales', label: 'Sucursales', roles: ['Administrador', 'Gerente de Operaciones', 'Gerente de Área', 'Consulta'] },
+  { id: 'tecnicos', label: 'Técnicos', roles: ['Administrador', 'Gerente de Operaciones'] },
+  { id: 'vehiculos', label: 'Vehículos', roles: ['Administrador', 'Gerente de Operaciones', 'Consulta'] },
+  { id: 'inventario', label: 'Inventario', roles: ['Administrador', 'Gerente de Operaciones'] },
+  { id: 'preventivo', label: 'Mantenimiento preventivo', roles: ['Administrador', 'Gerente de Operaciones', 'Técnico'] },
   { id: 'solicitud', label: 'Reportar necesidad', roles: ['Gerente de Sucursal'] }
 ];
 
@@ -256,8 +257,9 @@ function startApp() {
     if (mySession !== state.sessionId || !state.user) return;
     applyRoleScope();
     applyTecnicoScope();
+    applySupervisorScope();
     applyReadOnlyUI();
-    switchView(isTecnico() ? 'ordenes' : 'dashboard');
+    switchView((isTecnico() || isSupervisor()) ? 'ordenes' : 'dashboard');
   }).catch(function (err) {
     console.error('Error cargando datos:', err);
   });
@@ -351,6 +353,15 @@ function applyTecnicoScope() {
   state.cache.Ordenes = miId
     ? state.cache.Ordenes.filter(function (o) { return o.tecnico_id === miId; })
     : [];
+}
+
+/* ===================== ALCANCE POR ROL (Supervisor) =====================
+   El Supervisor solo debe ver la pantalla de Órdenes de trabajo, y dentro de
+   ella únicamente las órdenes Pendientes y las Finalizadas (no Asignado,
+   En proceso ni Cancelado). */
+function applySupervisorScope() {
+  if (!isSupervisor()) return;
+  state.cache.Ordenes = state.cache.Ordenes.filter(function (o) { return o.estado === 'Pendiente' || o.estado === 'Finalizado'; });
 }
 
 function applyReadOnlyUI() {
@@ -1278,6 +1289,7 @@ function refreshOrdenesForRole() {
   return refreshSheet('Ordenes').then(function () {
     if (isAreaManager()) applyRoleScope();
     if (isTecnico()) applyTecnicoScope();
+    if (isSupervisor()) applySupervisorScope();
   });
 }
 
@@ -1338,6 +1350,7 @@ function verificarCierre(id) {
     if (orden && orden.estado === 'Finalizado') {
       if (isAreaManager()) applyRoleScope();
       if (isTecnico()) applyTecnicoScope();
+      if (isSupervisor()) applySupervisorScope();
       return refrescarVistaTrasOrden().then(function () { cerrarCierreModal(); });
     }
     alert('Error al cerrar la orden: no se pudo confirmar con el servidor. Verifica tu conexión e intenta de nuevo.');
