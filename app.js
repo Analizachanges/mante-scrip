@@ -419,45 +419,7 @@ function tecnicoNombre(id) {
 function esOrdenAbierta(o) { return o.estado !== 'Finalizado' && o.estado !== 'Cancelado'; }
 
 /* ===================== DASHBOARD ===================== */
-let chartEstadoInstance = null;
-let chartSucursalInstance = null;
-
 function renderDashboard() {
-  const ordenes = state.cache.Ordenes;
-  const vehiculos = state.cache.Vehiculos;
-  const scoped = state.user.rol === 'Gerente de Área';
-
-  const abiertas = ordenes.filter(function (o) { return esOrdenAbierta(o); }).length;
-  const cerradas = ordenes.filter(function (o) { return o.estado === 'Finalizado'; }).length;
-
-  const tiempos = ordenes
-    .filter(function (o) { return o.estado === 'Finalizado' && o.fecha && o.fecha_cierre; })
-    .map(function (o) { return (new Date(o.fecha_cierre) - new Date(o.fecha)) / (1000 * 60 * 60 * 24); })
-    .filter(function (n) { return !isNaN(n) && n >= 0; });
-  const tiempoProm = tiempos.length
-    ? (tiempos.reduce(function (a, b) { return a + b; }, 0) / tiempos.length).toFixed(1)
-    : 0;
-
-  const costoTotal = ordenes.reduce(function (sum, o) { return sum + (Number(o.costo) || 0); }, 0);
-
-  document.getElementById('kpiAbiertas').textContent = abiertas;
-  document.getElementById('kpiCerradas').textContent = cerradas;
-  document.getElementById('kpiTiempo').textContent = tiempoProm;
-  document.getElementById('kpiCosto').textContent = '$' + costoTotal.toFixed(2);
-  document.getElementById('kpiFueraServicio').textContent = scoped
-    ? 'N/D'
-    : vehiculos.filter(function (v) { return v.estado === 'Fuera de servicio'; }).length;
-
-  const porTecnico = {};
-  ordenes.forEach(function (o) { if (o.tecnico_id) porTecnico[o.tecnico_id] = (porTecnico[o.tecnico_id] || 0) + 1; });
-  let topTec = '-', topCount = 0;
-  Object.keys(porTecnico).forEach(function (id) {
-    if (porTecnico[id] > topCount) { topCount = porTecnico[id]; topTec = tecnicoNombre(id); }
-  });
-  document.getElementById('kpiTecnicoTop').textContent = topTec;
-
-  renderChartEstado(ordenes);
-  renderChartSucursal(ordenes);
   renderSucursalesGrid();
   renderSolicitudesPanel();
   renderPanelGestion();
@@ -986,38 +948,6 @@ function renderInsights(solicitudes, bySuc) {
   list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');
 }
 
-function renderChartEstado(ordenes) {
-  const counts = { 'Pendiente': 0, 'En proceso': 0, 'Finalizado': 0 };
-  ordenes.forEach(function (o) { if (counts[o.estado] !== undefined) counts[o.estado]++; });
-  const ctx = document.getElementById('chartEstado');
-  if (!ctx || typeof Chart === 'undefined') return;
-  if (chartEstadoInstance) chartEstadoInstance.destroy();
-  chartEstadoInstance = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#f4a300', '#1565c0', '#2a9d8f'] }] },
-    options: { plugins: { legend: { position: 'bottom' } } }
-  });
-}
-
-function renderChartSucursal(ordenes) {
-  const counts = {};
-  ordenes.forEach(function (o) {
-    const n = sucursalNombre(o.sucursal_id);
-    counts[n] = (counts[n] || 0) + 1;
-  });
-  const sorted = Object.entries(counts).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 10);
-  const ctx = document.getElementById('chartSucursal');
-  if (!ctx || typeof Chart === 'undefined') return;
-  if (chartSucursalInstance) chartSucursalInstance.destroy();
-  chartSucursalInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: sorted.map(function (e) { return e[0]; }),
-      datasets: [{ label: 'Órdenes', data: sorted.map(function (e) { return e[1]; }), backgroundColor: '#1e6091' }]
-    },
-    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 30 } } } }
-  });
-}
 
 /* El color de cada sucursal refleja sus órdenes de trabajo abiertas (no el
    campo "estado" de la hoja Sucursales, que casi nunca varía): rojo si
